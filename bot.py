@@ -591,7 +591,7 @@ def send_hourly_report(current_time: str, state: dict, readings: dict,
 def process_hourly(current_hour: int, current_minute: int, current_time: str,
                    state: dict, readings: dict, creds: dict) -> None:
     """ประมวลผลรายงานรายชั่วโมง (ถ้าถึงเวลา)"""
-    if current_minute >= 5 or state["last_hourly_run"] == current_hour:
+    if state.get("last_hourly_run") == current_hour:
         return
 
     solar_daily_kwh = readings["solar_daily_kwh"]
