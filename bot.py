@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 def _require_env(name: str) -> str:
     """อ่าน environment variable — หยุดทำงานถ้าไม่มี"""
-    value = os.environ.get(name)
+    value = os.environ.get(name, "").strip()
     if not value:
         raise EnvironmentError(
             f"ไม่พบ {name} — กรุณาตั้งค่าใน GitHub Secrets "
