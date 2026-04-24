@@ -172,6 +172,9 @@ def _build_status_reply(readings: dict | None, current_time: str) -> str:
     sun_icon = "🌅" if solar_pwr > SUN_THRESHOLD else "🌙"
     sun_text = "แดดออก" if solar_pwr > SUN_THRESHOLD else "แดดหมด/กลางคืน"
 
+    solar_money = solar_daily_kwh * COST_PER_UNIT
+    grid_money = grid_daily_kwh * COST_PER_UNIT
+
     return (
         f"📊 *[ สถานะระบบโซลาร์ ]*\n"
         f"⏰ เวลา: {current_time}\n"
@@ -183,8 +186,8 @@ def _build_status_reply(readings: dict | None, current_time: str) -> str:
         f"🔋 บ้านใช้รวม: *{home_pwr:,.0f} W*\n"
         f"----------\n"
         f"📈 *ยอดสะสมวันนี้*\n"
-        f"• ผลิตได้: {solar_daily_kwh:,.2f} kWh\n"
-        f"• ซื้อไฟ: {grid_daily_kwh:,.2f} kWh"
+        f"• ผลิตได้: {solar_daily_kwh:,.2f} kWh ({solar_money:,.2f} ฿)\n"
+        f"• ซื้อไฟ: {grid_daily_kwh:,.2f} kWh ({grid_money:,.2f} ฿)"
     )
 
 
