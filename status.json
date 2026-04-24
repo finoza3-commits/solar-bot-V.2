@@ -2,7 +2,7 @@
   "last_solar_kwh": 0.0,
   "last_grid_kwh": 0.0,
   "is_overloaded": false,
-  "last_hourly_run": 0,
+  "last_hourly_run": 1,
   "sun_status": "แดดหมด",
   "is_offline": false,
   "last_update_id": 920094751
