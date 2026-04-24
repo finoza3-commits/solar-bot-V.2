@@ -1,0 +1,42 @@
+name: Solar Monitor Bot
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'  # สั่งให้รันทุกๆ 5 นาที
+  workflow_dispatch:
+
+# ป้องกัน race condition — รันทีละ 1 instance เท่านั้น
+concurrency:
+  group: solar-bot
+  cancel-in-progress: false
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Solar Bot
+        run: python bot.py
+        env:
+          DEYE_TOKEN: ${{ secrets.DEYE_TOKEN }}
+          INVERTER_SN: ${{ secrets.INVERTER_SN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+      - name: Commit and push status change
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Update status"
+          file_pattern: "status.json"
