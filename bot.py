@@ -65,6 +65,7 @@ DEFAULT_STATE = {
     "last_hourly_run": -1,
     "sun_status": None,
     "is_offline": False,
+    "last_update_id": 0,
 }
 
 
@@ -127,6 +128,200 @@ def send_telegram(message: str, creds: dict) -> bool:
 
     logger.error("ส่ง Telegram ล้มเหลวหลัง %d ครั้ง", TELEGRAM_RETRIES)
     return False
+
+
+# ==========================================
+# Telegram Chat Commands (คุยเช็คสถานะ + คุยถาม)
+# ==========================================
+
+def get_telegram_updates(creds: dict, last_update_id: int) -> list:
+    """ดึงข้อความใหม่จาก Telegram (getUpdates)"""
+    url = f"https://api.telegram.org/bot{creds['telegram_bot_token']}/getUpdates"
+    params = {
+        "offset": last_update_id + 1,
+        "timeout": 0,
+        "allowed_updates": '["message"]',
+    }
+    try:
+        resp = requests.get(url, params=params, timeout=TELEGRAM_TIMEOUT)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("ok"):
+                return data.get("result", [])
+        logger.warning("getUpdates failed: status=%d", resp.status_code)
+    except requests.RequestException as e:
+        logger.warning("getUpdates error: %s", e)
+    return []
+
+
+def _build_status_reply(readings: dict | None, current_time: str) -> str:
+    """สร้างข้อความตอบกลับสถานะปัจจุบัน"""
+    if readings is None:
+        return (
+            f"❌ *ระบบ Offline*\n"
+            f"ไม่สามารถดึงข้อมูลจากอินเวอร์เตอร์ได้\n"
+            f"⏰ อัพเดทล่าสุด: {current_time}"
+        )
+
+    solar_pwr = readings["solar_pwr"]
+    grid_pwr = readings["grid_pwr"]
+    home_pwr = readings["home_pwr"]
+    solar_daily_kwh = readings["solar_daily_kwh"]
+    grid_daily_kwh = readings["grid_daily_kwh"]
+
+    sun_icon = "🌅" if solar_pwr > SUN_THRESHOLD else "🌙"
+    sun_text = "แดดออก" if solar_pwr > SUN_THRESHOLD else "แดดหมด/กลางคืน"
+
+    return (
+        f"📊 *[ สถานะระบบโซลาร์ ]*\n"
+        f"⏰ เวลา: {current_time}\n"
+        f"----------\n"
+        f"{sun_icon} สถานะ: {sun_text}\n"
+        f"----------\n"
+        f"☀️ โซลาร์กำลังผลิต: *{solar_pwr:,.0f} W*\n"
+        f"⚡️ ดึงไฟกริด: *{grid_pwr:,.0f} W*\n"
+        f"🔋 บ้านใช้รวม: *{home_pwr:,.0f} W*\n"
+        f"----------\n"
+        f"📈 *ยอดสะสมวันนี้*\n"
+        f"• ผลิตได้: {solar_daily_kwh:,.2f} kWh\n"
+        f"• ซื้อไฟ: {grid_daily_kwh:,.2f} kWh"
+    )
+
+
+def _build_cost_reply(readings: dict | None, current_time: str) -> str:
+    """สร้างข้อความตอบกลับเรื่องค่าไฟ"""
+    if readings is None:
+        return "❌ ไม่สามารถคำนวณค่าไฟได้ — ระบบ Offline"
+
+    solar_daily_kwh = readings["solar_daily_kwh"]
+    grid_daily_kwh = readings["grid_daily_kwh"]
+    solar_money = solar_daily_kwh * COST_PER_UNIT
+    grid_money = grid_daily_kwh * COST_PER_UNIT
+    net = solar_money - grid_money
+
+    net_text = (
+        f"✅ ประหยัดสุทธิ {net:,.2f} ฿"
+        if net >= 0
+        else f"❌ จ่ายค่าไฟเพิ่ม {abs(net):,.2f} ฿"
+    )
+
+    return (
+        f"💰 *[ สรุปค่าไฟวันนี้ ]*\n"
+        f"⏰ เวลา: {current_time}\n"
+        f"----------\n"
+        f"☀️ ผลิตได้: {solar_daily_kwh:,.2f} kWh\n"
+        f"💡 ประหยัดแล้ว: *{solar_money:,.2f} บาท*\n"
+        f"----------\n"
+        f"⚡️ ซื้อไฟกริด: {grid_daily_kwh:,.2f} kWh\n"
+        f"💸 เสียค่าไฟ: *{grid_money:,.2f} บาท*\n"
+        f"----------\n"
+        f"💵 *สรุป: {net_text}*\n"
+        f"📌 คิดที่หน่วยละ {COST_PER_UNIT} บาท"
+    )
+
+
+def _build_solar_reply(readings: dict | None, current_time: str) -> str:
+    """สร้างข้อความตอบกลับเรื่องการผลิตไฟโซลาร์"""
+    if readings is None:
+        return "❌ ไม่สามารถดึงข้อมูลโซลาร์ได้ — ระบบ Offline"
+
+    solar_pwr = readings["solar_pwr"]
+    solar_daily_kwh = readings["solar_daily_kwh"]
+    home_pwr = readings["home_pwr"]
+    grid_pwr = readings["grid_pwr"]
+
+    if solar_pwr > SUN_THRESHOLD:
+        solar_pct = (solar_pwr / home_pwr * 100) if home_pwr > 0 else 0
+        status = f"🟢 กำลังผลิตไฟ ({solar_pct:.0f}% ของโหลด)"
+    else:
+        status = "🔴 ไม่ผลิตไฟ (แดดหมด/กลางคืน)"
+
+    return (
+        f"☀️ *[ ข้อมูลโซลาร์เซลล์ ]*\n"
+        f"⏰ เวลา: {current_time}\n"
+        f"----------\n"
+        f"📡 สถานะ: {status}\n"
+        f"⚡️ กำลังผลิต: *{solar_pwr:,.0f} W*\n"
+        f"📊 ผลิตสะสมวันนี้: *{solar_daily_kwh:,.2f} kWh*\n"
+        f"----------\n"
+        f"🏠 บ้านใช้: {home_pwr:,.0f} W\n"
+        f"🔌 ดึงกริด: {grid_pwr:,.0f} W\n"
+        f"☀️ จากโซลาร์: {solar_pwr:,.0f} W"
+    )
+
+
+def _build_help_reply() -> str:
+    """สร้างข้อความแสดงคำสั่งที่ใช้ได้"""
+    return (
+        f"📖 *[ คำสั่งที่ใช้ได้ ]*\n"
+        f"----------\n"
+        f"📊 `/status` หรือ *สถานะ*\n"
+        f"→ เช็คสถานะระบบ Real-time\n\n"
+        f"💰 `/cost` หรือ *ค่าไฟ*\n"
+        f"→ สรุปค่าไฟและเงินประหยัดวันนี้\n\n"
+        f"☀️ `/solar` หรือ *โซลาร์*\n"
+        f"→ ข้อมูลการผลิตไฟจากโซลาร์\n\n"
+        f"❓ `/help` หรือ *ช่วย*\n"
+        f"→ แสดงรายการคำสั่งนี้\n"
+        f"----------\n"
+        f"💡 _บอทตอบกลับทุก 5 นาที (ตาม GitHub Actions cron)_"
+    )
+
+
+def _build_unknown_reply(text: str) -> str:
+    """สร้างข้อความตอบกลับเมื่อไม่เข้าใจคำสั่ง"""
+    return (
+        f"🤔 ไม่เข้าใจคำสั่ง: `{text[:50]}`\n\n"
+        f"พิมพ์ `/help` หรือ *ช่วย* เพื่อดูคำสั่งที่ใช้ได้"
+    )
+
+
+def process_chat_commands(state: dict, creds: dict,
+                          readings: dict | None, current_time: str) -> None:
+    """ดึงข้อความจาก Telegram แล้วตอบกลับตามคำสั่ง"""
+    last_update_id = state.get("last_update_id", 0)
+    updates = get_telegram_updates(creds, last_update_id)
+
+    if not updates:
+        return
+
+    logger.info("พบข้อความใหม่ %d รายการ", len(updates))
+
+    for update in updates:
+        update_id = update.get("update_id", 0)
+        message = update.get("message", {})
+        text = message.get("text", "").strip().lower()
+        chat_id = str(message.get("chat", {}).get("id", ""))
+
+        # อัพเดท last_update_id
+        if update_id > last_update_id:
+            last_update_id = update_id
+
+        # ตอบเฉพาะ chat ที่ตั้งค่าไว้
+        if chat_id != creds["telegram_chat_id"]:
+            logger.info("ข้ามข้อความจาก chat_id: %s", chat_id)
+            continue
+
+        # ไม่มีข้อความ
+        if not text:
+            continue
+
+        # จับคู่คำสั่ง
+        if text in ("/status", "สถานะ", "เช็ค", "เช็คสถานะ", "status"):
+            reply = _build_status_reply(readings, current_time)
+        elif text in ("/cost", "ค่าไฟ", "เงิน", "ประหยัด", "cost"):
+            reply = _build_cost_reply(readings, current_time)
+        elif text in ("/solar", "โซลาร์", "แผง", "ผลิต", "solar"):
+            reply = _build_solar_reply(readings, current_time)
+        elif text in ("/help", "ช่วย", "help", "คำสั่ง", "/start", "เมนู"):
+            reply = _build_help_reply()
+        else:
+            reply = _build_unknown_reply(text)
+
+        send_telegram(reply, creds)
+
+    # บันทึก last_update_id
+    state["last_update_id"] = last_update_id
 
 
 # ==========================================
@@ -476,6 +671,9 @@ def main():
             # รายงานรายชั่วโมง
             process_hourly(current_hour, current_minute, current_time,
                            state, readings, creds)
+
+        # ตอบกลับข้อความ chat (ทำงานได้ทั้ง online/offline)
+        process_chat_commands(state, creds, readings, current_time)
 
     except requests.RequestException as e:
         logger.error("เชื่อมต่อ Deye API ล้มเหลว: %s", e)
