@@ -33,22 +33,24 @@ logger = logging.getLogger(__name__)
 # Environment Variables (ข้อมูลลับ)
 # ==========================================
 
-# ค่าเริ่มต้น (ใช้ env var แทนได้ถ้าตั้งค่าไว้)
-_DEFAULTS = {
-    "DEYE_TOKEN": "Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOlsib2F1dGgyLXJlc291cmNlIl0sInVzZXJfbmFtZSI6IjBfbml0aXRob245OTdAZ21haWwuY29tXzIiLCJzY29wZSI6WyJhbGwiXSwiZGV0YWlsIjp7Im9yZ2FuaXphdGlvbklkIjowLCJ0b3BHcm91cElkIjpudWxsLCJncm91cElkIjpudWxsLCJyb2xlSWQiOi0xLCJ1c2VySWQiOjEzNzQzNzEzLCJ2ZXJzaW9uIjoxMDAwLCJpZGVudGlmaWVyIjoibml0aXRob245OTdAZ21haWwuY29tIiwiaWRlbnRpdHlUeXBlIjoyLCJtZGMiOiJ1YyIsImFwcElkIjoiMjAyNjA0MjQ3NzM0MDAyIiwibWZhU3RhdHVzIjpudWxsLCJ0ZW5hbnQiOiJEZXllIn0sImV4cCI6MTc4MjE4MzUwMywibWRjIjoidWMiLCJhdXRob3JpdGllcyI6WyJhbGwiXSwianRpIjoiMTI2N2NmMjUtZDE2NS00NWIyLWFhZDgtMzdiMjE0MjcyM2M0IiwiY2xpZW50X2lkIjoidGVzdCJ9.Q6sfytmKAyjTfhhZpkDnmO33s8jNT2t5OJsJWFn_ZSJqAHjODrn5dUnwK2otRPMPEva-n_t390O0oUiVNgfEQWa_2BYI9WAANBuOkVySbmXRfuqknksqh8J696THxiarJWVqjJNF0DzP1AVnjkbu1mOlpUw4ORwCLk71AkcGT2Ej3QonqhGYAHjKWc76QYmgakH4OazJhfyvLzHSXiBnqknWJH0BADnJ2Za75HEydt8TqklPLrL-dXtyAqA080kIqiXDLVdnpDEAIn5fkxG6vqmD1_AiZSqp-WxGkezpOGxmVkPJ3CWjv5egrxzMgIvCG7K8209c_AkEzq0tz9iFBQ",
-    "INVERTER_SN": "2512272221",
-    "TELEGRAM_BOT_TOKEN": "8222753214:AAFJOzToPcvIN5iClhcF-WbCTz3NShNDtdI",
-    "TELEGRAM_CHAT_ID": "7065585231",
-}
+def _require_env(name: str) -> str:
+    """อ่าน environment variable — หยุดทำงานถ้าไม่มี"""
+    value = os.environ.get(name)
+    if not value:
+        raise EnvironmentError(
+            f"ไม่พบ {name} — กรุณาตั้งค่าใน GitHub Secrets "
+            f"(Settings → Secrets → Actions)"
+        )
+    return value
 
 
 def get_credentials() -> dict:
-    """โหลดข้อมูลลับ — ใช้ env var ถ้ามี, ไม่งั้นใช้ค่าเริ่มต้น"""
+    """โหลดข้อมูลลับจาก Environment Variables (GitHub Secrets)"""
     return {
-        "deye_token": os.environ.get("DEYE_TOKEN", _DEFAULTS["DEYE_TOKEN"]),
-        "inverter_sn": os.environ.get("INVERTER_SN", _DEFAULTS["INVERTER_SN"]),
-        "telegram_bot_token": os.environ.get("TELEGRAM_BOT_TOKEN", _DEFAULTS["TELEGRAM_BOT_TOKEN"]),
-        "telegram_chat_id": os.environ.get("TELEGRAM_CHAT_ID", _DEFAULTS["TELEGRAM_CHAT_ID"]),
+        "deye_token": _require_env("DEYE_TOKEN"),
+        "inverter_sn": _require_env("INVERTER_SN"),
+        "telegram_bot_token": _require_env("TELEGRAM_BOT_TOKEN"),
+        "telegram_chat_id": _require_env("TELEGRAM_CHAT_ID"),
     }
 
 
