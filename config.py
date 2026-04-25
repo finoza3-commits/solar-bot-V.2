@@ -31,5 +31,9 @@ DEYE_API_URL = "https://eu1-developer.deyecloud.com/v1.0/device/latest"
 SOLAR_POWER_KEY = "TotalActiveACOutputPower"
 SOLAR_DAILY_KEY = "DailyActiveProduction"
 HOME_POWER_KEY = "TotalConsumptionPower"
+HOME_DAILY_KEYS = [
+    "DailyConsumptionEnergy", "DailyEnergyConsumed", "DailyConsumption",
+    "DailyLoadConsumption", "DailyEnergyConsumption", "DailyActiveConsumption"
+]
 GRID_DAILY_KEYS = ["DailyEnergyPurchased", "DailyGridPurchased"]
 GRID_POWER_KEYS = ["TotalGridPower", "Total Grid Power"]

@@ -18,7 +18,7 @@ from config import (
     COST_PER_UNIT, SUN_THRESHOLD, OVERLOAD_LIMIT, TIMEZONE,
     STATUS_FILE, TELEGRAM_RETRIES, API_TIMEOUT, TELEGRAM_TIMEOUT,
     DEYE_API_URL, SOLAR_POWER_KEY, SOLAR_DAILY_KEY, HOME_POWER_KEY,
-    GRID_DAILY_KEYS, GRID_POWER_KEYS,
+    HOME_DAILY_KEYS, GRID_DAILY_KEYS, GRID_POWER_KEYS,
 )
 
 # ==========================================
@@ -418,6 +418,7 @@ def _parse_device_data(device_data: list) -> dict:
     solar_pwr = 0.0
     solar_daily_kwh = 0.0
     home_pwr = 0.0
+    home_daily_kwh = 0.0
     grid_daily_kwh = 0.0
     grid_pwr = 0.0
 
@@ -446,19 +447,32 @@ def _parse_device_data(device_data: list) -> dict:
             solar_daily_kwh = val
         elif key == HOME_POWER_KEY:
             home_pwr = val
+        elif key in HOME_DAILY_KEYS:
+            home_daily_kwh = val
         elif key in GRID_DAILY_KEYS:
-            grid_daily_kwh = val
+            pass # We will calculate this manually instead of reading from API
         elif key in GRID_POWER_KEYS:
             grid_pwr = val
 
-    # Fallback: คำนวณ grid power จาก home - solar
+    # Fallback: คำนวณ grid_pwr จาก home - solar (ถ้าอ่านไม่ได้)
     if grid_pwr == 0.0:
-        grid_pwr = max(0, home_pwr - solar_pwr)
+        grid_pwr = home_pwr - solar_pwr
+
+    # คำนวณ grid_daily_kwh จาก ส่วนต่าง (Home - Solar) ตามที่ผู้ใช้ต้องการ
+    if home_daily_kwh > 0:
+        grid_daily_kwh = max(0.0, home_daily_kwh - solar_daily_kwh)
+    else:
+        # ถ้าหาคีย์ Home Daily ไม่เจอ ให้ลองใช้ค่าจาก Grid Purchased เผื่อไว้
+        for item in device_data:
+            if item.get("key") in GRID_DAILY_KEYS:
+                grid_daily_kwh = _safe_float(item.get("value"))
+                break
 
     return {
         "solar_pwr": solar_pwr,
         "solar_daily_kwh": solar_daily_kwh,
         "home_pwr": home_pwr,
+        "home_daily_kwh": home_daily_kwh,
         "grid_daily_kwh": grid_daily_kwh,
         "grid_pwr": grid_pwr,
     }
