@@ -711,7 +711,8 @@ def check_sun_status(solar_pwr: float, state: dict, creds: dict, readings: dict)
                 f"🏠 บ้านใช้ไฟ: {home_pwr:,.0f} W | 🔋 แรงดัน: {voltage:.1f} V",
                 creds,
             )
-        elif current_sun == "แดดกำลังจะหมด":
+        elif current_sun == "แดดกำลังจะหมด" and prev_sun == "แดดออก":
+            # เตือนเฉพาะตอนลดลง (แดดออก→กำลังจะหมด) ไม่เตือนตอนขึ้น (แดดหมด→กำลังจะหมด)
             send_telegram(
                 f"🌇 *[ แจ้งเตือน: แดดกำลังจะหมด! ]*\n"
                 f"โซลาร์ผลิตเหลือ: *{solar_pwr:,.0f} W* (ต่ำกว่า 300W)\n"
