@@ -9,7 +9,7 @@ COST_PER_UNIT = 4.5
 SUN_THRESHOLD = 100
 
 # ค่ากริดสูงสุด (W) ก่อนแจ้งเตือน Overload
-OVERLOAD_LIMIT = 1500
+OVERLOAD_LIMIT = 2000
 
 # Timezone
 TIMEZONE = "Asia/Bangkok"
