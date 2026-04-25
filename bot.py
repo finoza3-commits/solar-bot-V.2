@@ -198,7 +198,7 @@ def _build_status_reply(readings: dict | None, current_time: str) -> str:
     grid_pwr = readings["grid_pwr"]
     grid_daily_kwh = readings["grid_daily_kwh"]
 
-    solar_status = "🟢 ผลิตไฟ" if solar_pwr > SUN_THRESHOLD else "🔴 ไม่ผลิต"
+    solar_status = "🟢 ตอนนี้โซลาร์กำลังผลิตไฟฟ้า" if solar_pwr > SUN_THRESHOLD else "🔴 ตอนนี้โซลาร์ไม่ได้ผลิตไฟฟ้า"
 
     # คำนวณเงิน
     saved_money = solar_daily_kwh * COST_PER_UNIT
@@ -214,9 +214,9 @@ def _build_status_reply(readings: dict | None, current_time: str) -> str:
         f"⏰ เวลา: {current_time}\n"
         f"{weather_line}"
         f"----------\n"
-        f"☀️ โซลาร์: {solar_pwr:,.0f} W ({solar_status})\n"
-        f"⚡️ ไฟฟ้า: {grid_pwr:,.0f} W\n"
-        f"🏠 บ้านใช้: {home_pwr:,.0f} W\n"
+        f"☀️ โซลาร์: {solar_pwr:,.0f} W   |   ⚡️ ไฟฟ้า: {grid_pwr:,.0f} W\n"
+        f"🏠 บ้านใช้ไฟฟ้า : {home_pwr:,.0f} W\n"
+        f"{solar_status}\n"
         f"----------\n"
         f"📈 *ยอดสะสมวันนี้*\n"
         f"☀️ ผลิตได้: {solar_daily_kwh:,.2f} kWh (ประหยัด {saved_money:,.2f} ฿)\n"
