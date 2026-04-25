@@ -110,11 +110,11 @@ def save_state(state: dict) -> None:
 # Telegram
 # ==========================================
 
-def send_telegram(message: str, creds: dict) -> bool:
+def send_telegram(message: str, creds: dict, target_chat_id: str | None = None) -> bool:
     """ส่งข้อความผ่าน Telegram พร้อม retry"""
     url = f"https://api.telegram.org/bot{creds['telegram_bot_token']}/sendMessage"
     payload = {
-        "chat_id": creds["telegram_chat_id"],
+        "chat_id": target_chat_id if target_chat_id else creds["telegram_chat_id"],
         "text": message,
         "parse_mode": "Markdown",
     }
@@ -445,9 +445,10 @@ def process_chat_commands(state: dict, creds: dict,
         if update_id > last_update_id:
             last_update_id = update_id
 
-        # ตอบเฉพาะ chat ที่ตั้งค่าไว้
+        # 🔒 ระบบล็อก (Lock System): ตรวจสอบสิทธิ์การใช้งาน
         if chat_id != creds["telegram_chat_id"]:
-            logger.info("ข้ามข้อความจาก chat_id: %s", chat_id)
+            logger.warning("Unauthorized access attempt from chat_id: %s", chat_id)
+            send_telegram("⛔ ขออภัย บอทนี้เป็นบอทมอนิเตอร์โซลาร์ส่วนตัว คุณไม่ได้รับอนุญาตให้ใช้งานครับ", creds, target_chat_id=chat_id)
             continue
 
         # ไม่มีข้อความ
