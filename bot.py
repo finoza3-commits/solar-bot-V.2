@@ -203,6 +203,7 @@ def _build_status_reply(readings: dict | None, current_time: str) -> str:
     # คำนวณเงิน
     saved_money = solar_daily_kwh * COST_PER_UNIT
     home_cost = home_daily_kwh * COST_PER_UNIT
+    grid_cost = grid_daily_kwh * COST_PER_UNIT
     est_grid_cost = max(0, home_cost - saved_money)
 
     weather_str = readings.get("current_weather", "")
@@ -219,7 +220,8 @@ def _build_status_reply(readings: dict | None, current_time: str) -> str:
         f"----------\n"
         f"📈 *ยอดสะสมวันนี้*\n"
         f"☀️ ผลิตได้: {solar_daily_kwh:,.2f} kWh (ประหยัด {saved_money:,.2f} ฿)\n"
-        f"🏠 บ้านใช้ไฟทั้งหมด: {home_daily_kwh:,.2f} kWh\n"
+        f"⚡️ ซื้อกริด: {grid_daily_kwh:,.2f} kWh (เสียค่าไฟ {grid_cost:,.2f} ฿)\n"
+        f"🏠 บ้านใช้รวม: {home_daily_kwh:,.2f} kWh (ตีเป็นเงิน {home_cost:,.2f} ฿)\n"
         f"💸 ประเมินค่าไฟที่ต้องจ่าย: {est_grid_cost:,.2f} ฿"
     )
 
@@ -278,7 +280,7 @@ def _build_solar_reply(readings: dict | None, current_time: str) -> str:
         f"----------\n"
         f"📡 สถานะ: {status}\n"
         f"⚡️ กำลังผลิต: *{solar_pwr:,.0f} W*\n"
-        f"📊 ผลิตสะสมวันนี้: *{solar_daily_kwh:,.2f} kWh*\n"
+        f"📊 ผลิตสะสมวันนี้: *{solar_daily_kwh:,.2f} kWh* (ประหยัด {solar_daily_kwh * COST_PER_UNIT:,.2f} ฿)\n"
         f"----------\n"
         f"🏠 บ้านใช้: {home_pwr:,.0f} W\n"
         f"🔌 ดึงกริด: {grid_pwr:,.0f} W\n"
@@ -312,7 +314,7 @@ def _build_grid_reply(readings: dict | None, current_time: str) -> str:
         f"----------\n"
         f"📡 สถานะ: {status}\n"
         f"🔌 กำลังดึงไฟ: *{display_grid_pwr:,.0f} W*\n"
-        f"📊 ซื้อไฟสะสมวันนี้: *{grid_daily_kwh:,.2f} kWh*\n"
+        f"📊 ซื้อไฟสะสมวันนี้: *{grid_daily_kwh:,.2f} kWh* (เสียค่าไฟ {grid_daily_kwh * COST_PER_UNIT:,.2f} ฿)\n"
         f"----------\n"
         f"🏠 บ้านใช้: {home_pwr:,.0f} W\n"
         f"☀️ จากโซลาร์: {solar_pwr:,.0f} W"
@@ -922,12 +924,16 @@ def home():
                     <span class="value solar">{{solar_daily_kwh:,.2f}} kWh</span>
                 </div>
                 <div class="data-row">
+                    <span class="label">ประหยัดเงิน</span>
+                    <span class="value money">{{solar_daily_money:,.2f}} ฿</span>
+                </div>
+                <div class="data-row">
                     <span class="label">ซื้อไฟหลวง</span>
                     <span class="value grid">{{grid_daily_kwh:,.2f}} kWh</span>
                 </div>
                 <div class="data-row">
-                    <span class="label">ประหยัดเงิน</span>
-                    <span class="value money">{{solar_daily_money:,.2f}} ฿</span>
+                    <span class="label">เสียค่าไฟ</span>
+                    <span class="value grid">{{grid_daily_money:,.2f}} ฿</span>
                 </div>
             </div>
 
@@ -939,12 +945,16 @@ def home():
                     <span class="value solar">{{monthly_solar_kwh:,.2f}} kWh</span>
                 </div>
                 <div class="data-row">
+                    <span class="label">ประหยัดเงินรวม</span>
+                    <span class="value money">{{monthly_solar_money:,.2f}} ฿</span>
+                </div>
+                <div class="data-row">
                     <span class="label">ซื้อไฟหลวงรวม</span>
                     <span class="value grid">{{monthly_grid_kwh:,.2f}} kWh</span>
                 </div>
                 <div class="data-row">
-                    <span class="label">ประหยัดเงินรวม</span>
-                    <span class="value money">{{monthly_solar_money:,.2f}} ฿</span>
+                    <span class="label">เสียค่าไฟรวม</span>
+                    <span class="value grid">{{monthly_grid_money:,.2f}} ฿</span>
                 </div>
             </div>
         </div>
