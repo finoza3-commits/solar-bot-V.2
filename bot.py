@@ -73,6 +73,7 @@ DEFAULT_STATE = {
     "monthly_solar_money": 0.0,
     "monthly_grid_money": 0.0,
     "current_month": "",
+    "daily_hourly_history": [],
 }
 
 
@@ -664,8 +665,28 @@ def _calculate_financials(solar_daily_kwh: float, grid_daily_kwh: float,
 
 def send_daily_summary(current_time: str, financials: dict,
                        solar_daily_kwh: float, grid_daily_kwh: float,
-                       creds: dict) -> None:
+                       creds: dict, state: dict = None) -> None:
     """ส่งสรุปยอดรวมประจำวัน (เที่ยงคืน)"""
+    
+    # สร้างกราฟ/ตารางรายชั่วโมง
+    hourly_text = ""
+    if state and "daily_hourly_history" in state and state["daily_hourly_history"]:
+        hourly_text = "\n----------\n📈 *กราฟการทำงานรายชั่วโมง*\n"
+        for entry in state["daily_hourly_history"]:
+            time_str = entry["time"]
+            s_val = entry["solar"]
+            g_val = entry["grid"]
+            # สร้างบาร์กราฟเล็กๆ สัดส่วน: 1 บล็อก = 0.5 kWh
+            s_bar = "☀️" * min(8, max(1, int(s_val * 2))) if s_val > 0 else ""
+            g_bar = "⚡️" * min(8, max(1, int(g_val * 2))) if g_val > 0 else ""
+            
+            hourly_text += f"`{time_str}` | โซลาร์ {s_val:.1f} {s_bar}\n"
+            if g_val > 0:
+                hourly_text += f"`     ` | กริด   {g_val:.1f} {g_bar}\n"
+            
+        # ล้างข้อมูลเมื่อส่งสรุปแล้ว
+        state["daily_hourly_history"] = []
+
     msg = (
         f"🏆 *[ สรุปยอดรวมประจำวัน ]*\n"
         f"📅 วันที่: {current_time}\n"
@@ -676,42 +697,7 @@ def send_daily_summary(current_time: str, financials: dict,
         f"----------\n"
         f"📊 *หน่วยไฟฟ้ารวม*\n"
         f"• ผลิต: {solar_daily_kwh:,.2f} | ซื้อ: {grid_daily_kwh:,.2f} kWh"
-    )
-    send_telegram(msg, creds)
-
-
-def send_hourly_report(current_time: str, state: dict, readings: dict,
-                       financials: dict, creds: dict) -> None:
-    """ส่งรายงานสถานะรายชั่วโมง"""
-    solar_pwr = readings["solar_pwr"]
-    grid_pwr = readings["grid_pwr"]
-    home_pwr = readings["home_pwr"]
-    solar_daily_kwh = readings["solar_daily_kwh"]
-    grid_daily_kwh = readings["grid_daily_kwh"]
-
-    status_icon = "🌅" if solar_pwr > SUN_THRESHOLD else "🌤"
-
-    msg = (
-        f"🕒 *[ รายงานสถานะรายชั่วโมง ]*\n"
-        f"⏱ เวลา: {current_time}\n"
-        f"----------\n"
-        f"☀️ *โซลาร์เซลล์ (ผลิตไฟ)*\n"
-        f"• เดิม {state['last_solar_kwh']:,.2f} + ใหม่ {financials['solar_hourly']:,.2f} = รวม {solar_daily_kwh:,.2f} หน่วย\n"
-        f"• 💡 ประหยัดเพิ่มชั่วโมงนี้: +{financials['solar_money_hr']:,.2f} ฿\n"
-        f"----------\n"
-        f"🔌 *ดึงไฟหลวง (เสียค่าไฟ)*\n"
-        f"• เดิม {state['last_grid_kwh']:,.2f} + ใหม่ {financials['grid_hourly']:,.2f} = รวม {grid_daily_kwh:,.2f} หน่วย\n"
-        f"• 💸 จ่ายเพิ่มชั่วโมงนี้: +{financials['grid_money_hr']:,.2f} ฿\n"
-        f"----------\n"
-        f"📈 *ยอดรวมเงินวันนี้ (สะสม)*\n"
-        f"• 💰 ประหยัดแล้ว: {financials['solar_money_day']:,.2f} ฿\n"
-        f"• 💸 เสียค่าไฟแล้ว: {financials['grid_money_day']:,.2f} ฿\n"
-        f"• 💵 สรุปวันนี้: {financials['net_text']}\n"
-        f"----------\n"
-        f"🏠 *สถานะ Real-time*\n"
-        f"• {status_icon} โซลาร์: {solar_pwr:,.0f} W\n"
-        f"• ⚡️ ไฟหลวง: {grid_pwr:,.0f} W\n"
-        f"• 🔋 โหลดรวม: {home_pwr:,.0f} W"
+        f"{hourly_text}"
     )
     send_telegram(msg, creds)
 
@@ -741,9 +727,17 @@ def process_hourly(current_hour: int, current_minute: int, current_time: str,
     financials["solar_hourly"] = solar_hourly
     financials["grid_hourly"] = grid_hourly
 
-    if solar_pwr > 20 and current_hour != 0:
-        # รายงานรายชั่วโมง (ตอนมีแดด)
-        send_hourly_report(current_time, state, readings, financials, creds)
+    # เก็บประวัติรายชั่วโมงสำหรับสรุปรายวัน
+    if "daily_hourly_history" not in state:
+        state["daily_hourly_history"] = []
+    
+    # บันทึกเฉพาะตอนที่ผลิตไฟได้หรือใช้กริดเกิน 0.05 หน่วย เพื่อไม่ให้รก
+    if solar_hourly > 0.05 or grid_hourly > 0.05:
+        state["daily_hourly_history"].append({
+            "time": f"{current_hour:02d}:00",
+            "solar": solar_hourly,
+            "grid": grid_hourly
+        })
 
     # อัพเดทสถานะ
     state["last_hourly_run"] = current_hour
@@ -1035,7 +1029,7 @@ def deye_monitoring_loop(creds):
                         financials = _calculate_financials(
                             readings["solar_daily_kwh"], readings["grid_daily_kwh"], 0.0, 0.0
                         )
-                        send_daily_summary(current_time, financials, readings["solar_daily_kwh"], readings["grid_daily_kwh"], creds)
+                        send_daily_summary(current_time, financials, readings["solar_daily_kwh"], readings["grid_daily_kwh"], creds, global_state)
                         
                         # --- เก็บสถิติรายเดือน ---
                         current_month_str = now_dt.strftime("%Y-%m")
