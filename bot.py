@@ -268,15 +268,19 @@ def _build_grid_reply(readings: dict | None, current_time: str) -> str:
     if grid_pwr > 0:
         grid_pct = (grid_pwr / home_pwr * 100) if home_pwr > 0 else 0
         status = f"🔴 กำลังดึงไฟหลวง ({grid_pct:.0f}% ของโหลด)"
+    elif grid_pwr < 0:
+        status = "🔄 จ่ายไฟย้อนเข้าสายส่ง (Export)"
     else:
         status = "🟢 ไม่ได้ดึงไฟหลวง (ใช้โซลาร์ล้วน/แบตเตอรี่)"
+
+    display_grid_pwr = abs(grid_pwr)
 
     return (
         f"⚡️ *[ ข้อมูลไฟหลวง (กริด) ]*\n"
         f"⏰ เวลา: {current_time}\n"
         f"----------\n"
         f"📡 สถานะ: {status}\n"
-        f"🔌 กำลังดึงไฟ: *{grid_pwr:,.0f} W*\n"
+        f"🔌 กำลังดึงไฟ: *{display_grid_pwr:,.0f} W*\n"
         f"📊 ซื้อไฟสะสมวันนี้: *{grid_daily_kwh:,.2f} kWh*\n"
         f"----------\n"
         f"🏠 บ้านใช้: {home_pwr:,.0f} W\n"
