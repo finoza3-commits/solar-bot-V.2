@@ -159,37 +159,34 @@ def get_telegram_updates(creds: dict, last_update_id: int) -> list:
 def _build_status_reply(readings: dict | None, current_time: str) -> str:
     """สร้างข้อความตอบกลับสถานะปัจจุบัน"""
     if readings is None:
-        return (
-            f"❌ *ระบบ Offline*\n"
-            f"ไม่สามารถดึงข้อมูลจากอินเวอร์เตอร์ได้\n"
-            f"⏰ อัพเดทล่าสุด: {current_time}"
-        )
+        return "❌ ระบบ Offline หรือเชื่อมต่อ Deye API ไม่ได้"
 
     solar_pwr = readings["solar_pwr"]
-    grid_pwr = readings["grid_pwr"]
-    home_pwr = readings["home_pwr"]
     solar_daily_kwh = readings["solar_daily_kwh"]
+    home_pwr = readings["home_pwr"]
+    home_daily_kwh = readings.get("home_daily_kwh", 0.0)
+    grid_pwr = readings["grid_pwr"]
     grid_daily_kwh = readings["grid_daily_kwh"]
 
-    sun_icon = "🌅" if solar_pwr > SUN_THRESHOLD else "🌙"
-    sun_text = "แดดออก" if solar_pwr > SUN_THRESHOLD else "แดดหมด/กลางคืน"
+    solar_status = "🟢 ผลิตไฟ" if solar_pwr > SUN_THRESHOLD else "🔴 ไม่ผลิต"
 
-    solar_money = solar_daily_kwh * COST_PER_UNIT
-    grid_money = grid_daily_kwh * COST_PER_UNIT
+    # คำนวณเงิน
+    saved_money = solar_daily_kwh * COST_PER_UNIT
+    home_cost = home_daily_kwh * COST_PER_UNIT
+    est_grid_cost = max(0, home_cost - saved_money)
 
     return (
-        f"📊 *[ สถานะระบบโซลาร์ ]*\n"
+        f"📊 *[ สถานะระบบ Real-time ]*\n"
         f"⏰ เวลา: {current_time}\n"
         f"----------\n"
-        f"{sun_icon} สถานะ: {sun_text}\n"
-        f"----------\n"
-        f"☀️ โซลาร์กำลังผลิต: *{solar_pwr:,.0f} W*\n"
-        f"⚡️ ดึงไฟกริด: *{grid_pwr:,.0f} W*\n"
-        f"🔋 บ้านใช้รวม: *{home_pwr:,.0f} W*\n"
+        f"☀️ โซลาร์: {solar_pwr:,.0f} W ({solar_status})\n"
+        f"🏠 บ้านใช้: {home_pwr:,.0f} W\n"
+        f"⚡️ กริด: {grid_pwr:,.0f} W\n"
         f"----------\n"
         f"📈 *ยอดสะสมวันนี้*\n"
-        f"• ผลิตได้: {solar_daily_kwh:,.2f} kWh ({solar_money:,.2f} ฿)\n"
-        f"• ซื้อไฟ: {grid_daily_kwh:,.2f} kWh ({grid_money:,.2f} ฿)"
+        f"☀️ ผลิตได้: {solar_daily_kwh:,.2f} kWh (ประหยัด {saved_money:,.2f} ฿)\n"
+        f"🏠 บ้านใช้ไฟทั้งหมด: {home_daily_kwh:,.2f} kWh\n"
+        f"💸 ประเมินค่าไฟที่ต้องจ่าย: {est_grid_cost:,.2f} ฿"
     )
 
 
@@ -721,6 +718,44 @@ def deye_monitoring_loop(creds):
 
             with readings_lock:
                 global_readings = readings
+
+            # --- เพิ่มลอจิกสะสมค่าไฟบ้านเอง (Manual Accumulation) ---
+            with state_lock:
+                now_dt = datetime.now(pytz.timezone(TIMEZONE))
+                last_calc_str = global_state.get("last_calc_time")
+                
+                # ถ้ารีเซ็ตวันใหม่
+                current_date = now_dt.strftime("%Y-%m-%d")
+                if global_state.get("calc_date") != current_date:
+                    global_state["manual_home_daily_kwh"] = 0.0
+                    global_state["calc_date"] = current_date
+
+                if last_calc_str:
+                    try:
+                        last_dt = datetime.fromisoformat(last_calc_str)
+                        hours_passed = (now_dt - last_dt).total_seconds() / 3600.0
+                        # กันกรณีเวลาเพี้ยนหรือพึ่งเปิดบอทใหม่
+                        if 0 < hours_passed < 1.0:
+                            # คำนวณ kWh = (Watt / 1000) * ชั่วโมงที่ผ่านไป
+                            added_kwh = (readings["home_pwr"] / 1000.0) * hours_passed
+                            global_state["manual_home_daily_kwh"] = global_state.get("manual_home_daily_kwh", 0.0) + added_kwh
+                    except ValueError:
+                        pass
+                
+                global_state["last_calc_time"] = now_dt.isoformat()
+                
+                # เอาค่าที่สะสมเอง ยัดกลับเข้าไปใน readings
+                readings["home_daily_kwh"] = global_state.get("manual_home_daily_kwh", 0.0)
+                
+                # คำนวณกริดใหม่ด้วยค่าที่อัปเดตแล้ว
+                if readings["home_daily_kwh"] > 0:
+                    readings["grid_daily_kwh"] = max(0.0, readings["home_daily_kwh"] - readings["solar_daily_kwh"])
+                
+                save_state(global_state)
+            # ----------------------------------------------------
+
+            logger.info("อัปเดตข้อมูลจาก Deye สำเร็จ (Home: %.2f W, Home_Daily: %.2f kWh, Grid_Daily: %.2f kWh)", 
+                        readings["home_pwr"], readings.get("home_daily_kwh", 0), readings.get("grid_daily_kwh", 0))
 
             if readings is None:
                 check_online_status(False, state, creds, current_time)
