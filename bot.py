@@ -68,6 +68,11 @@ DEFAULT_STATE = {
     "sun_status": None,
     "is_offline": False,
     "last_update_id": 0,
+    "monthly_solar_kwh": 0.0,
+    "monthly_grid_kwh": 0.0,
+    "monthly_solar_money": 0.0,
+    "monthly_grid_money": 0.0,
+    "current_month": "",
 }
 
 
@@ -294,6 +299,8 @@ def _build_help_reply() -> str:
         f"→ เช็คสถานะระบบ Real-time\n\n"
         f"💰 `/cost` หรือ *ค่าไฟ*\n"
         f"→ สรุปค่าไฟและเงินประหยัดวันนี้\n\n"
+        f"📅 `/month` หรือ *เดือน*\n"
+        f"→ สรุปยอดสะสมรวมของเดือนนี้\n\n"
         f"☀️ `/solar` หรือ *โซลาร์*\n"
         f"→ ข้อมูลการผลิตไฟจากโซลาร์\n\n"
         f"⚡️ `/grid` หรือ *ไฟหลวง*\n"
@@ -310,6 +317,41 @@ def _build_unknown_reply(text: str) -> str:
     return (
         f"🤔 ไม่เข้าใจคำสั่ง: `{text[:50]}`\n\n"
         f"พิมพ์ `/help` หรือ *ช่วย* เพื่อดูคำสั่งที่ใช้ได้"
+    )
+
+
+def _build_month_reply(state: dict, current_time: str) -> str:
+    """สร้างข้อความสรุปยอดรายเดือน"""
+    month = state.get("current_month", "-")
+    if not month:
+        return "⏳ ยังไม่มีข้อมูลสะสมรายเดือน (ระบบจะเริ่มเก็บข้อมูลคืนนี้ตอนเที่ยงคืน)"
+        
+    solar_kwh = state.get("monthly_solar_kwh", 0.0)
+    grid_kwh = state.get("monthly_grid_kwh", 0.0)
+    solar_money = state.get("monthly_solar_money", 0.0)
+    grid_money = state.get("monthly_grid_money", 0.0)
+    net = solar_money - grid_money
+    
+    net_text = (
+        f"✅ ประหยัดสุทธิ {net:,.2f} ฿"
+        if net >= 0
+        else f"❌ จ่ายค่าไฟเพิ่ม {abs(net):,.2f} ฿"
+    )
+
+    return (
+        f"📅 *[ สรุปยอดประจำเดือน: {month} ]*\n"
+        f"⏰ อัปเดตล่าสุด: {current_time}\n"
+        f"----------\n"
+        f"☀️ *พลังงานจากโซลาร์*\n"
+        f"• ผลิตสะสม: {solar_kwh:,.2f} kWh\n"
+        f"• 💡 ประหยัดเงิน: {solar_money:,.2f} บาท\n"
+        f"----------\n"
+        f"⚡️ *พลังงานจากไฟหลวง (กริด)*\n"
+        f"• ซื้อสะสม: {grid_kwh:,.2f} kWh\n"
+        f"• 💸 เสียค่าไฟ: {grid_money:,.2f} บาท\n"
+        f"----------\n"
+        f"💵 *สรุป: {net_text}*\n"
+        f"📌 คิดที่หน่วยละ {COST_PER_UNIT} บาท"
     )
 
 
@@ -354,6 +396,8 @@ def process_chat_commands(state: dict, creds: dict,
             reply = _build_status_reply(readings, current_time)
         elif cmd in ("/cost", "ค่าไฟ", "เงิน", "ประหยัด", "cost"):
             reply = _build_cost_reply(readings, current_time)
+        elif cmd in ("/month", "เดือน", "รายเดือน", "month"):
+            reply = _build_month_reply(state, current_time)
         elif cmd in ("/solar", "โซลาร์", "แผง", "ผลิต", "solar"):
             reply = _build_solar_reply(readings, current_time)
         elif cmd in ("/grid", "กริด", "ไฟหลวง", "การไฟฟ้า", "grid"):
@@ -687,7 +731,206 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Solar Bot is running 24/7!"
+    state = {}
+    readings = {}
+    if global_state is not None:
+        with state_lock:
+            state = global_state.copy()
+    if global_readings is not None:
+        with readings_lock:
+            readings = global_readings.copy()
+            
+    # extract data
+    solar_pwr = readings.get("solar_pwr", 0)
+    home_pwr = readings.get("home_pwr", 0)
+    grid_pwr = readings.get("grid_pwr", 0)
+    
+    solar_daily_kwh = readings.get("solar_daily_kwh", 0)
+    grid_daily_kwh = readings.get("grid_daily_kwh", 0)
+    solar_daily_money = solar_daily_kwh * COST_PER_UNIT
+    grid_daily_money = grid_daily_kwh * COST_PER_UNIT
+    
+    monthly_solar_kwh = state.get("monthly_solar_kwh", 0)
+    monthly_grid_kwh = state.get("monthly_grid_kwh", 0)
+    monthly_solar_money = state.get("monthly_solar_money", 0)
+    monthly_grid_money = state.get("monthly_grid_money", 0)
+    
+    current_month = state.get("current_month", "กำลังรวบรวมข้อมูล")
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="th">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Solar Bot Dashboard</title>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Kanit:wght@300;500;700&display=swap" rel="stylesheet">
+        <style>
+            :root {{
+                --bg: #0f172a;
+                --card-bg: rgba(30, 41, 59, 0.7);
+                --text: #f8fafc;
+                --text-muted: #94a3b8;
+                --primary: #3b82f6;
+                --solar: #eab308;
+                --grid: #ef4444;
+                --home: #10b981;
+                --accent: #8b5cf6;
+            }}
+            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+            body {{
+                font-family: 'Kanit', 'Inter', sans-serif;
+                background-color: var(--bg);
+                color: var(--text);
+                min-height: 100vh;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                padding: 2rem;
+                background-image: 
+                    radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.15), transparent 25%),
+                    radial-gradient(circle at 85% 30%, rgba(234, 179, 8, 0.15), transparent 25%);
+                background-attachment: fixed;
+            }}
+            h1 {{
+                font-size: 2.5rem;
+                font-weight: 700;
+                margin-bottom: 2rem;
+                background: linear-gradient(to right, #60a5fa, #a78bfa);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                text-align: center;
+            }}
+            .dashboard {{
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+                gap: 1.5rem;
+                width: 100%;
+                max-width: 1200px;
+            }}
+            .card {{
+                background: var(--card-bg);
+                backdrop-filter: blur(16px);
+                -webkit-backdrop-filter: blur(16px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 1.5rem;
+                padding: 1.5rem;
+                transition: transform 0.3s ease, box-shadow 0.3s ease;
+                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            }}
+            .card:hover {{
+                transform: translateY(-5px);
+                box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            }}
+            .card-header {{
+                font-size: 1.25rem;
+                font-weight: 600;
+                margin-bottom: 1rem;
+                color: var(--text-muted);
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+            }}
+            .data-row {{
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 1rem;
+                padding-bottom: 1rem;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            }}
+            .data-row:last-child {{ border-bottom: none; margin-bottom: 0; padding-bottom: 0; }}
+            .label {{ font-size: 1rem; color: var(--text-muted); }}
+            .value {{ font-size: 1.5rem; font-weight: 700; }}
+            .value.solar {{ color: var(--solar); }}
+            .value.grid {{ color: var(--grid); }}
+            .value.home {{ color: var(--home); }}
+            .value.money {{ color: var(--accent); }}
+            
+            @media (max-width: 768px) {{
+                body {{ padding: 1rem; }}
+                h1 {{ font-size: 2rem; }}
+            }}
+            
+            /* Animations */
+            @keyframes pulse {{
+                0%, 100% {{ opacity: 1; }}
+                50% {{ opacity: 0.7; }}
+            }}
+            .live-indicator {{
+                display: inline-block;
+                width: 10px;
+                height: 10px;
+                background-color: var(--home);
+                border-radius: 50%;
+                animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+                margin-right: 8px;
+            }}
+        </style>
+    </head>
+    <body>
+        <h1><span class="live-indicator"></span>Solar Dashboard</h1>
+        
+        <div class="dashboard">
+            <!-- Real-time Card -->
+            <div class="card">
+                <div class="card-header">⚡️ สถานะปัจจุบัน (Real-time)</div>
+                <div class="data-row">
+                    <span class="label">โซลาร์เซลล์</span>
+                    <span class="value solar">{{solar_pwr:,.0f}} W</span>
+                </div>
+                <div class="data-row">
+                    <span class="label">ไฟหลวง (Grid)</span>
+                    <span class="value grid">{{grid_pwr:,.0f}} W</span>
+                </div>
+                <div class="data-row">
+                    <span class="label">บ้านใช้ไฟ</span>
+                    <span class="value home">{{home_pwr:,.0f}} W</span>
+                </div>
+            </div>
+
+            <!-- Daily Card -->
+            <div class="card">
+                <div class="card-header">📈 สรุปวันนี้ (Daily)</div>
+                <div class="data-row">
+                    <span class="label">ผลิตไฟได้</span>
+                    <span class="value solar">{{solar_daily_kwh:,.2f}} kWh</span>
+                </div>
+                <div class="data-row">
+                    <span class="label">ซื้อไฟหลวง</span>
+                    <span class="value grid">{{grid_daily_kwh:,.2f}} kWh</span>
+                </div>
+                <div class="data-row">
+                    <span class="label">ประหยัดเงิน</span>
+                    <span class="value money">{{solar_daily_money:,.2f}} ฿</span>
+                </div>
+            </div>
+
+            <!-- Monthly Card -->
+            <div class="card">
+                <div class="card-header">📅 สรุปเดือนนี้ ({{current_month}})</div>
+                <div class="data-row">
+                    <span class="label">ผลิตไฟได้รวม</span>
+                    <span class="value solar">{{monthly_solar_kwh:,.2f}} kWh</span>
+                </div>
+                <div class="data-row">
+                    <span class="label">ซื้อไฟหลวงรวม</span>
+                    <span class="value grid">{{monthly_grid_kwh:,.2f}} kWh</span>
+                </div>
+                <div class="data-row">
+                    <span class="label">ประหยัดเงินรวม</span>
+                    <span class="value money">{{monthly_solar_money:,.2f}} ฿</span>
+                </div>
+            </div>
+        </div>
+        
+        <div style="margin-top: 3rem; color: var(--text-muted); font-size: 0.875rem;">
+            อัปเดตอัตโนมัติทุกๆ 5 นาที • <a href="javascript:window.location.reload(true)" style="color: var(--primary); text-decoration: none;">รีเฟรชข้อมูล</a>
+        </div>
+    </body>
+    </html>
+    """
+    return html
 
 global_state = None
 global_readings = None
@@ -757,7 +1000,28 @@ def deye_monitoring_loop(creds):
                         financials = _calculate_financials(
                             readings["solar_daily_kwh"], readings["grid_daily_kwh"], 0.0, 0.0
                         )
-                        send_daily_summary(current_time_str, financials, readings["solar_daily_kwh"], readings["grid_daily_kwh"], creds)
+                        send_daily_summary(current_time, financials, readings["solar_daily_kwh"], readings["grid_daily_kwh"], creds)
+                        
+                        # --- เก็บสถิติรายเดือน ---
+                        current_month_str = now_dt.strftime("%Y-%m")
+                        if global_state.get("current_month") and global_state.get("current_month") != current_month_str:
+                            # ส่งสรุปเดือนเก่าก่อนรีเซ็ต
+                            month_reply = _build_month_reply(global_state, current_time)
+                            send_telegram(f"📢 *จบเดือนแล้ว! สรุปยอดของเดือน {global_state.get('current_month')} ครับ*\n\n{month_reply}", creds)
+                            
+                            # รีเซ็ต
+                            global_state["monthly_solar_kwh"] = 0.0
+                            global_state["monthly_grid_kwh"] = 0.0
+                            global_state["monthly_solar_money"] = 0.0
+                            global_state["monthly_grid_money"] = 0.0
+
+                        global_state["current_month"] = current_month_str
+                        global_state["monthly_solar_kwh"] = global_state.get("monthly_solar_kwh", 0.0) + readings["solar_daily_kwh"]
+                        global_state["monthly_grid_kwh"] = global_state.get("monthly_grid_kwh", 0.0) + readings["grid_daily_kwh"]
+                        global_state["monthly_solar_money"] = global_state.get("monthly_solar_money", 0.0) + financials["solar_money_day"]
+                        global_state["monthly_grid_money"] = global_state.get("monthly_grid_money", 0.0) + financials["grid_money_day"]
+                        # -----------------------
+
                         global_state["last_daily_run"] = current_date
                 # ------------------------------
 
