@@ -283,6 +283,9 @@ def _build_solar_reply(readings: dict | None, current_time: str) -> str:
     else:
         status = "🔴 ไม่ผลิตไฟ (แดดหมด/กลางคืน)"
 
+    pv1 = readings.get('dc_voltage_pv1', 0)
+    pv2 = readings.get('dc_voltage_pv2', 0)
+
     return (
         f"☀️ *[ ข้อมูลโซลาร์เซลล์ ]*\n"
         f"⏰ เวลา: {current_time}\n"
@@ -290,6 +293,10 @@ def _build_solar_reply(readings: dict | None, current_time: str) -> str:
         f"📡 สถานะ: {status}\n"
         f"⚡️ กำลังผลิต: *{solar_pwr:,.0f} W*\n"
         f"📊 ผลิตสะสมวันนี้: *{solar_daily_kwh:,.2f} kWh* (ประหยัด {solar_daily_kwh * COST_PER_UNIT:,.2f} ฿)\n"
+        f"----------\n"
+        f"🔗 *แรงดัน DC แผงโซลาร์*\n"
+        f"• String 1 (PV1): {pv1:.1f} V\n"
+        f"• String 2 (PV2): {pv2:.1f} V\n"
         f"----------\n"
         f"☀️ จากโซลาร์: {solar_pwr:,.0f} W\n"
         f"🔌 ดึงไฟฟ้า: {grid_pwr:,.0f} W\n"
@@ -514,6 +521,8 @@ def _parse_device_data(device_data: list) -> dict:
     grid_daily_kwh = 0.0
     grid_pwr = 0.0
     voltage = 0.0
+    dc_voltage_pv1 = 0.0
+    dc_voltage_pv2 = 0.0
 
     # Keys ที่ต้องตรวจ auto-scale (อาจเป็น kW หรือ W)
     auto_scale_keys = {
@@ -547,8 +556,11 @@ def _parse_device_data(device_data: list) -> dict:
         elif key in GRID_POWER_KEYS:
             grid_pwr = val
         elif key in VOLTAGE_KEYS and voltage == 0.0:
-            # Voltage ไม่ต้อง auto-scale เพราะหน่วยเป็น V อยู่แล้ว
             voltage = _safe_float(item.get("value"))
+        elif key == "DCVoltagePV1":
+            dc_voltage_pv1 = _safe_float(item.get("value"))
+        elif key == "DCVoltagePV2":
+            dc_voltage_pv2 = _safe_float(item.get("value"))
 
     # Fallback: คำนวณ grid_pwr จาก home - solar (ถ้าอ่านไม่ได้)
     if grid_pwr == 0.0:
@@ -572,6 +584,8 @@ def _parse_device_data(device_data: list) -> dict:
         "grid_daily_kwh": grid_daily_kwh,
         "grid_pwr": grid_pwr,
         "voltage": voltage,
+        "dc_voltage_pv1": dc_voltage_pv1,
+        "dc_voltage_pv2": dc_voltage_pv2,
     }
 
 
