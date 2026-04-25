@@ -228,9 +228,12 @@ def _build_status_reply(readings: dict | None, current_time: str) -> str:
         f"🏠 บ้านใช้รวม: {home_daily_kwh:,.2f} kWh (ตีเป็นเงิน {home_cost:,.2f} ฿)\n"
         f"💸 ประเมินค่าไฟที่ต้องจ่าย: {est_grid_cost:,.2f} ฿\n"
         f"----------\n"
-        f"📊 *สถิติสะสมตลอดอายุ*\n"
-        f"☀️ ผลิตรวม: {readings.get('total_production', 0):,.2f} kWh\n"
-        f"🏠 ใช้ไฟรวม: {readings.get('total_consumption', 0):,.2f} kWh"
+        f"📊 *สถิติสะสมตลอดอายุ* (ติดตั้ง 19/4/69)\n"
+        f"📅 ใช้งานมาแล้ว: {(datetime.now(pytz.timezone('Asia/Bangkok')).date() - datetime(2026, 4, 19).date()).days} วัน\n"
+        f"☀️ ผลิตรวม: {readings.get('total_production', 0):,.2f} kWh "
+        f"(ประหยัด *{readings.get('total_production', 0) * COST_PER_UNIT:,.2f} ฿*)\n"
+        f"🏠 ใช้ไฟรวม: {readings.get('total_consumption', 0):,.2f} kWh "
+        f"(คิดเป็นเงิน {readings.get('total_consumption', 0) * COST_PER_UNIT:,.2f} ฿)"
     )
 
 
