@@ -75,6 +75,8 @@ DEFAULT_STATE = {
     "monthly_grid_money": 0.0,
     "current_month": "",
     "daily_hourly_history": [],
+    "total_consumption_baseline": 0.0,
+    "baseline_date": "",
 }
 
 
@@ -1146,10 +1148,28 @@ def deye_monitoring_loop(creds):
                 global_state["last_calc_time"] = now_dt.isoformat()
                 
                 # เอาค่าที่สะสมเอง ยัดกลับเข้าไปใน readings (ถ้า API ส่งมาให้ด้วย ก็เอาค่าที่มากที่สุด)
-                readings["home_daily_kwh"] = max(
-                    readings.get("home_daily_kwh", 0.0), 
-                    global_state.get("manual_home_daily_kwh", 0.0)
-                )
+                # --- ใช้ TotalConsumption baseline เพื่อคำนวณยอดใช้ไฟรายวันที่แม่นยำ ---
+                total_cons = readings.get("total_consumption", 0.0)
+                if total_cons > 0:
+                    if global_state.get("baseline_date") != current_date:
+                        # วันใหม่: ตั้ง baseline
+                        global_state["total_consumption_baseline"] = total_cons
+                        global_state["baseline_date"] = current_date
+                    
+                    baseline = global_state.get("total_consumption_baseline", total_cons)
+                    home_daily_from_total = max(0.0, total_cons - baseline)
+                    
+                    # ใช้ค่าที่มากที่สุดระหว่าง API / manual / total_consumption
+                    readings["home_daily_kwh"] = max(
+                        readings.get("home_daily_kwh", 0.0),
+                        global_state.get("manual_home_daily_kwh", 0.0),
+                        home_daily_from_total
+                    )
+                else:
+                    readings["home_daily_kwh"] = max(
+                        readings.get("home_daily_kwh", 0.0), 
+                        global_state.get("manual_home_daily_kwh", 0.0)
+                    )
                 
                 # คำนวณกริดใหม่ด้วยค่าที่อัปเดตแล้ว
                 if readings["home_daily_kwh"] > 0:
