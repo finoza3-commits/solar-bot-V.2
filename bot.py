@@ -215,8 +215,8 @@ def _build_status_reply(readings: dict | None, current_time: str) -> str:
         f"{weather_line}"
         f"----------\n"
         f"☀️ โซลาร์: {solar_pwr:,.0f} W ({solar_status})\n"
-        f"🏠 บ้านใช้: {home_pwr:,.0f} W\n"
         f"⚡️ ไฟฟ้า: {grid_pwr:,.0f} W\n"
+        f"🏠 บ้านใช้: {home_pwr:,.0f} W\n"
         f"----------\n"
         f"📈 *ยอดสะสมวันนี้*\n"
         f"☀️ ผลิตได้: {solar_daily_kwh:,.2f} kWh (ประหยัด {saved_money:,.2f} ฿)\n"
@@ -282,9 +282,9 @@ def _build_solar_reply(readings: dict | None, current_time: str) -> str:
         f"⚡️ กำลังผลิต: *{solar_pwr:,.0f} W*\n"
         f"📊 ผลิตสะสมวันนี้: *{solar_daily_kwh:,.2f} kWh* (ประหยัด {solar_daily_kwh * COST_PER_UNIT:,.2f} ฿)\n"
         f"----------\n"
-        f"🏠 บ้านใช้: {home_pwr:,.0f} W\n"
+        f"☀️ จากโซลาร์: {solar_pwr:,.0f} W\n"
         f"🔌 ดึงไฟฟ้า: {grid_pwr:,.0f} W\n"
-        f"☀️ จากโซลาร์: {solar_pwr:,.0f} W"
+        f"🏠 บ้านใช้: {home_pwr:,.0f} W"
     )
 
 
@@ -316,8 +316,8 @@ def _build_grid_reply(readings: dict | None, current_time: str) -> str:
         f"🔌 กำลังดึงไฟ: *{display_grid_pwr:,.0f} W*\n"
         f"📊 ซื้อไฟสะสมวันนี้: *{grid_daily_kwh:,.2f} kWh* (เสียค่าไฟ {grid_daily_kwh * COST_PER_UNIT:,.2f} ฿)\n"
         f"----------\n"
-        f"🏠 บ้านใช้: {home_pwr:,.0f} W\n"
-        f"☀️ จากโซลาร์: {solar_pwr:,.0f} W"
+        f"☀️ จากโซลาร์: {solar_pwr:,.0f} W\n"
+        f"🏠 บ้านใช้: {home_pwr:,.0f} W"
     )
 
 
@@ -620,8 +620,8 @@ def check_overload(solar_pwr: float, grid_pwr: float, home_pwr: float,
             f"⚠️ *[ แจ้งเตือนด่วน! ]*\n"
             f"ใช้งานเกินกำลังการผลิต!\n"
             f"----------\n"
-            f"⚡️ ดึงไฟฟ้า: {grid_pwr:,.0f} W\n"
             f"☀️ โซลาร์ผลิต: {solar_pwr:,.0f} W\n"
+            f"⚡️ ดึงไฟฟ้า: {grid_pwr:,.0f} W\n"
             f"🔋 บ้านใช้ไฟรวม: {home_pwr:,.0f} W\n"
             f"*(กรุณาลดการใช้ไฟฟ้าเพื่อประหยัดค่าไฟ)*",
             creds,
