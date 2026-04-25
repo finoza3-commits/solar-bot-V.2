@@ -19,6 +19,7 @@ from config import (
     STATUS_FILE, TELEGRAM_RETRIES, API_TIMEOUT, TELEGRAM_TIMEOUT,
     DEYE_API_URL, SOLAR_POWER_KEY, SOLAR_DAILY_KEY, HOME_POWER_KEY,
     HOME_DAILY_KEYS, GRID_DAILY_KEYS, GRID_POWER_KEYS,
+    VOLTAGE_KEYS, LOW_VOLTAGE_LIMIT,
 )
 
 # ==========================================
@@ -216,6 +217,7 @@ def _build_status_reply(readings: dict | None, current_time: str) -> str:
         f"----------\n"
         f"☀️ โซลาร์: {solar_pwr:,.0f} W   |   ⚡️ ไฟฟ้า: {grid_pwr:,.0f} W\n"
         f"🏠 บ้านใช้ไฟฟ้า : {home_pwr:,.0f} W\n"
+        f"🔋 แรงดันไฟฟ้า: {readings.get('voltage', 0):,.1f} V\n"
         f"{solar_status}\n"
         f"----------\n"
         f"📈 *ยอดสะสมวันนี้*\n"
@@ -324,7 +326,8 @@ def _build_grid_reply(readings: dict | None, current_time: str) -> str:
         f"📊 ซื้อไฟสะสมวันนี้: *{grid_daily_kwh:,.2f} kWh* (เสียค่าไฟ {grid_daily_kwh * COST_PER_UNIT:,.2f} ฿)\n"
         f"----------\n"
         f"☀️ จากโซลาร์: {solar_pwr:,.0f} W\n"
-        f"🏠 บ้านใช้: {home_pwr:,.0f} W"
+        f"🏠 บ้านใช้: {home_pwr:,.0f} W\n"
+        f"🔋 แรงดันไฟฟ้า: {readings.get('voltage', 0):,.1f} V"
     )
 
 
@@ -500,6 +503,7 @@ def _parse_device_data(device_data: list) -> dict:
     home_daily_kwh = 0.0
     grid_daily_kwh = 0.0
     grid_pwr = 0.0
+    voltage = 0.0
 
     # Keys ที่ต้องตรวจ auto-scale (อาจเป็น kW หรือ W)
     auto_scale_keys = {
@@ -532,6 +536,9 @@ def _parse_device_data(device_data: list) -> dict:
             pass # We will calculate this manually instead of reading from API
         elif key in GRID_POWER_KEYS:
             grid_pwr = val
+        elif key in VOLTAGE_KEYS and voltage == 0.0:
+            # Voltage ไม่ต้อง auto-scale เพราะหน่วยเป็น V อยู่แล้ว
+            voltage = _safe_float(item.get("value"))
 
     # Fallback: คำนวณ grid_pwr จาก home - solar (ถ้าอ่านไม่ได้)
     if grid_pwr == 0.0:
@@ -554,6 +561,7 @@ def _parse_device_data(device_data: list) -> dict:
         "home_daily_kwh": home_daily_kwh,
         "grid_daily_kwh": grid_daily_kwh,
         "grid_pwr": grid_pwr,
+        "voltage": voltage,
     }
 
 
@@ -641,6 +649,33 @@ def check_overload(solar_pwr: float, grid_pwr: float, home_pwr: float,
             creds,
         )
         state["is_overloaded"] = False
+
+
+def check_low_voltage(voltage: float, state: dict, creds: dict, current_time: str) -> None:
+    """ตรวจสอบแรงดันไฟฟ้าต่ำ แจ้งเตือนเมื่อต่ำกว่า LOW_VOLTAGE_LIMIT"""
+    if voltage <= 0:
+        return  # ไม่มีข้อมูลแรงดัน
+
+    is_low = voltage < LOW_VOLTAGE_LIMIT
+
+    if is_low and not state.get("is_low_voltage", False):
+        send_telegram(
+            f"⚠️ *[ แจ้งเตือน: แรงดันไฟฟ้าตก! ]*\n"
+            f"🔋 แรงดันปัจจุบัน: *{voltage:.1f} V* (ต่ำกว่า {LOW_VOLTAGE_LIMIT} V)\n"
+            f"⏰ เวลา: {current_time}\n"
+            f"----------\n"
+            f"ไฟอาจตกหรือไม่เสถียร ควรลดการใช้ไฟฟ้าหนัก\n"
+            f"หรือตรวจสอบระบบไฟฟ้าในบ้าน",
+            creds,
+        )
+        state["is_low_voltage"] = True
+    elif not is_low and state.get("is_low_voltage", False):
+        send_telegram(
+            f"✅ *[ แรงดันไฟฟ้ากลับสู่ปกติแล้ว ]*\n"
+            f"🔋 แรงดันปัจจุบัน: *{voltage:.1f} V*",
+            creds,
+        )
+        state["is_low_voltage"] = False
 
 
 # ==========================================
@@ -1094,6 +1129,9 @@ def deye_monitoring_loop(creds):
                 check_overload(
                     readings["solar_pwr"], readings["grid_pwr"],
                     readings["home_pwr"], state, creds,
+                )
+                check_low_voltage(
+                    readings.get("voltage", 0), state, creds, current_time,
                 )
                 process_hourly(current_hour, current_minute, current_time,
                                state, readings, creds)
