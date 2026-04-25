@@ -669,10 +669,7 @@ def process_hourly(current_hour: int, current_minute: int, current_time: str,
     financials["solar_hourly"] = solar_hourly
     financials["grid_hourly"] = grid_hourly
 
-    if current_hour == 0:
-        # สรุปยอดรวมประจำวัน (เที่ยงคืน)
-        send_daily_summary(current_time, financials, solar_daily_kwh, grid_daily_kwh, creds)
-    elif solar_pwr > 20:
+    if solar_pwr > 20 and current_hour != 0:
         # รายงานรายชั่วโมง (ตอนมีแดด)
         send_hourly_report(current_time, state, readings, financials, creds)
 
@@ -751,6 +748,16 @@ def deye_monitoring_loop(creds):
                 if readings["home_daily_kwh"] > 0:
                     readings["grid_daily_kwh"] = max(0.0, readings["home_daily_kwh"] - readings["solar_daily_kwh"])
                 
+                # --- ส่งสรุปรายวันตอน 23:55 ---
+                if now_dt.hour == 23 and now_dt.minute >= 50:
+                    if global_state.get("last_daily_run") != current_date:
+                        financials = _calculate_financials(
+                            readings["solar_daily_kwh"], readings["grid_daily_kwh"], 0.0, 0.0
+                        )
+                        send_daily_summary(current_time_str, financials, readings["solar_daily_kwh"], readings["grid_daily_kwh"], creds)
+                        global_state["last_daily_run"] = current_date
+                # ------------------------------
+
                 save_state(global_state)
             # ----------------------------------------------------
 
