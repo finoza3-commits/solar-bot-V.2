@@ -1,8 +1,8 @@
 {
-  "last_solar_kwh": 0.1,
+  "last_solar_kwh": 1.6,
   "last_grid_kwh": 0.0,
   "is_overloaded": false,
-  "last_hourly_run": 7,
+  "last_hourly_run": 10,
   "sun_status": "แดดออก",
   "is_offline": false,
   "last_update_id": 920094752
