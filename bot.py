@@ -242,9 +242,9 @@ def _build_cost_reply(readings: dict | None, current_time: str) -> str:
     net = solar_money - grid_money
 
     net_text = (
-        f"✅ กำไรสุทธิ {net:,.2f} ฿"
+        f"✅ ประหยัดสุทธิ {net:,.2f} ฿"
         if net >= 0
-        else f"❌ ติดลบ {abs(net):,.2f} ฿"
+        else f"❌ จ่ายค่าไฟเพิ่ม {abs(net):,.2f} ฿"
     )
 
     return (
