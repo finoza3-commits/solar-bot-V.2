@@ -217,14 +217,18 @@ def _build_status_reply(readings: dict | None, current_time: str) -> str:
         f"----------\n"
         f"☀️ โซลาร์: {solar_pwr:,.0f} W   |   ⚡️ ไฟฟ้า: {grid_pwr:,.0f} W\n"
         f"🏠 บ้านใช้ไฟฟ้า : {home_pwr:,.0f} W\n"
-        f"🔋 แรงดันไฟฟ้า: {readings.get('voltage', 0):,.1f} V\n"
+        f"🔋 แรงดันไฟฟ้า: {readings.get('voltage', 0):,.1f} V | ความถี่: {readings.get('ac_frequency', 0):.2f} Hz\n"
         f"{solar_status}\n"
         f"----------\n"
         f"📈 *ยอดสะสมวันนี้*\n"
         f"☀️ ผลิตได้: {solar_daily_kwh:,.2f} kWh (ประหยัด {saved_money:,.2f} ฿)\n"
         f"⚡️ ซื้อไฟฟ้า: {grid_daily_kwh:,.2f} kWh (เสียค่าไฟ {grid_cost:,.2f} ฿)\n"
         f"🏠 บ้านใช้รวม: {home_daily_kwh:,.2f} kWh (ตีเป็นเงิน {home_cost:,.2f} ฿)\n"
-        f"💸 ประเมินค่าไฟที่ต้องจ่าย: {est_grid_cost:,.2f} ฿"
+        f"💸 ประเมินค่าไฟที่ต้องจ่าย: {est_grid_cost:,.2f} ฿\n"
+        f"----------\n"
+        f"📊 *สถิติสะสมตลอดอายุ*\n"
+        f"☀️ ผลิตรวม: {readings.get('total_production', 0):,.2f} kWh\n"
+        f"🏠 ใช้ไฟรวม: {readings.get('total_consumption', 0):,.2f} kWh"
     )
 
 
@@ -291,12 +295,17 @@ def _build_solar_reply(readings: dict | None, current_time: str) -> str:
         f"⏰ เวลา: {current_time}\n"
         f"----------\n"
         f"📡 สถานะ: {status}\n"
-        f"⚡️ กำลังผลิต: *{solar_pwr:,.0f} W*\n"
+        f"⚡️ กำลังผลิต AC: *{solar_pwr:,.0f} W*\n"
         f"📊 ผลิตสะสมวันนี้: *{solar_daily_kwh:,.2f} kWh* (ประหยัด {solar_daily_kwh * COST_PER_UNIT:,.2f} ฿)\n"
         f"----------\n"
-        f"🔗 *แรงดัน DC แผงโซลาร์*\n"
-        f"• String 1 (PV1): {pv1:.1f} V\n"
-        f"• String 2 (PV2): {pv2:.1f} V\n"
+        f"🔗 *แผงโซลาร์ String 1 (PV1)*\n"
+        f"• แรงดัน: {pv1:.1f} V | กระแส: {readings.get('dc_current_pv1', 0):.2f} A\n"
+        f"• กำลังผลิต: {readings.get('dc_power_pv1', 0):,.0f} W\n"
+        f"🔗 *แผงโซลาร์ String 2 (PV2)*\n"
+        f"• แรงดัน: {pv2:.1f} V | กระแส: {readings.get('dc_current_pv2', 0):.2f} A\n"
+        f"• กำลังผลิต: {readings.get('dc_power_pv2', 0):,.0f} W\n"
+        f"----------\n"
+        f"🏆 *ผลิตไฟสะสมตลอดอายุ: {readings.get('total_production', 0):,.2f} kWh*\n"
         f"----------\n"
         f"☀️ จากโซลาร์: {solar_pwr:,.0f} W\n"
         f"🔌 ดึงไฟฟ้า: {grid_pwr:,.0f} W\n"
@@ -332,9 +341,16 @@ def _build_grid_reply(readings: dict | None, current_time: str) -> str:
         f"🔌 กำลังดึงไฟ: *{display_grid_pwr:,.0f} W*\n"
         f"📊 ซื้อไฟสะสมวันนี้: *{grid_daily_kwh:,.2f} kWh* (เสียค่าไฟ {grid_daily_kwh * COST_PER_UNIT:,.2f} ฿)\n"
         f"----------\n"
+        f"🔋 แรงดันไฟฟ้า: *{readings.get('voltage', 0):,.1f} V*\n"
+        f"⚡️ ความถี่: {readings.get('ac_frequency', 0):.2f} Hz\n"
+        f"🔌 กระแส AC: {readings.get('ac_current', 0):.2f} A\n"
+        f"----------\n"
+        f"🏆 *สถิติสะสมตลอดอายุ*\n"
+        f"⚡️ ซื้อไฟรวม: {readings.get('total_energy_purchased', 0):,.2f} kWh\n"
+        f"🔄 ส่งขายกริดรวม: {readings.get('total_grid_feed_in', 0):,.2f} kWh\n"
+        f"----------\n"
         f"☀️ จากโซลาร์: {solar_pwr:,.0f} W\n"
-        f"🏠 บ้านใช้: {home_pwr:,.0f} W\n"
-        f"🔋 แรงดันไฟฟ้า: {readings.get('voltage', 0):,.1f} V"
+        f"🏠 บ้านใช้: {home_pwr:,.0f} W"
     )
 
 
@@ -523,6 +539,16 @@ def _parse_device_data(device_data: list) -> dict:
     voltage = 0.0
     dc_voltage_pv1 = 0.0
     dc_voltage_pv2 = 0.0
+    ac_frequency = 0.0
+    ac_current = 0.0
+    dc_current_pv1 = 0.0
+    dc_current_pv2 = 0.0
+    dc_power_pv1 = 0.0
+    dc_power_pv2 = 0.0
+    total_production = 0.0
+    total_consumption = 0.0
+    total_grid_feed_in = 0.0
+    total_energy_purchased = 0.0
 
     # Keys ที่ต้องตรวจ auto-scale (อาจเป็น kW หรือ W)
     auto_scale_keys = {
@@ -561,6 +587,26 @@ def _parse_device_data(device_data: list) -> dict:
             dc_voltage_pv1 = _safe_float(item.get("value"))
         elif key == "DCVoltagePV2":
             dc_voltage_pv2 = _safe_float(item.get("value"))
+        elif key == "ACOutputFrequencyR":
+            ac_frequency = _safe_float(item.get("value"))
+        elif key == "ACCurrentRUA":
+            ac_current = _safe_float(item.get("value"))
+        elif key == "DCCurrentPV1":
+            dc_current_pv1 = _safe_float(item.get("value"))
+        elif key == "DCCurrentPV2":
+            dc_current_pv2 = _safe_float(item.get("value"))
+        elif key == "DCPowerPV1":
+            dc_power_pv1 = _safe_float(item.get("value"))
+        elif key == "DCPowerPV2":
+            dc_power_pv2 = _safe_float(item.get("value"))
+        elif key == "TotalActiveProduction":
+            total_production = _safe_float(item.get("value"))
+        elif key == "TotalConsumption":
+            total_consumption = _safe_float(item.get("value"))
+        elif key == "TotalGridFeedIn":
+            total_grid_feed_in = _safe_float(item.get("value"))
+        elif key == "TotalEnergyPurchased":
+            total_energy_purchased = _safe_float(item.get("value"))
 
     # Fallback: คำนวณ grid_pwr จาก home - solar (ถ้าอ่านไม่ได้)
     if grid_pwr == 0.0:
@@ -586,6 +632,16 @@ def _parse_device_data(device_data: list) -> dict:
         "voltage": voltage,
         "dc_voltage_pv1": dc_voltage_pv1,
         "dc_voltage_pv2": dc_voltage_pv2,
+        "ac_frequency": ac_frequency,
+        "ac_current": ac_current,
+        "dc_current_pv1": dc_current_pv1,
+        "dc_current_pv2": dc_current_pv2,
+        "dc_power_pv1": dc_power_pv1,
+        "dc_power_pv2": dc_power_pv2,
+        "total_production": total_production,
+        "total_consumption": total_consumption,
+        "total_grid_feed_in": total_grid_feed_in,
+        "total_energy_purchased": total_energy_purchased,
     }
 
 
