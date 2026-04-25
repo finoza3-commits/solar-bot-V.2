@@ -741,8 +741,11 @@ def deye_monitoring_loop(creds):
                 
                 global_state["last_calc_time"] = now_dt.isoformat()
                 
-                # เอาค่าที่สะสมเอง ยัดกลับเข้าไปใน readings
-                readings["home_daily_kwh"] = global_state.get("manual_home_daily_kwh", 0.0)
+                # เอาค่าที่สะสมเอง ยัดกลับเข้าไปใน readings (ถ้า API ส่งมาให้ด้วย ก็เอาค่าที่มากที่สุด)
+                readings["home_daily_kwh"] = max(
+                    readings.get("home_daily_kwh", 0.0), 
+                    global_state.get("manual_home_daily_kwh", 0.0)
+                )
                 
                 # คำนวณกริดใหม่ด้วยค่าที่อัปเดตแล้ว
                 if readings["home_daily_kwh"] > 0:
