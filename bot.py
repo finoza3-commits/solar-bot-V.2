@@ -255,6 +255,35 @@ def _build_solar_reply(readings: dict | None, current_time: str) -> str:
     )
 
 
+def _build_grid_reply(readings: dict | None, current_time: str) -> str:
+    """สร้างข้อความตอบกลับเรื่องการดึงไฟจากการไฟฟ้า (กริด)"""
+    if readings is None:
+        return "❌ ไม่สามารถดึงข้อมูลกริดได้ — ระบบ Offline"
+
+    grid_pwr = readings["grid_pwr"]
+    grid_daily_kwh = readings["grid_daily_kwh"]
+    home_pwr = readings["home_pwr"]
+    solar_pwr = readings["solar_pwr"]
+
+    if grid_pwr > 0:
+        grid_pct = (grid_pwr / home_pwr * 100) if home_pwr > 0 else 0
+        status = f"🔴 กำลังดึงไฟหลวง ({grid_pct:.0f}% ของโหลด)"
+    else:
+        status = "🟢 ไม่ได้ดึงไฟหลวง (ใช้โซลาร์ล้วน/แบตเตอรี่)"
+
+    return (
+        f"⚡️ *[ ข้อมูลไฟหลวง (กริด) ]*\n"
+        f"⏰ เวลา: {current_time}\n"
+        f"----------\n"
+        f"📡 สถานะ: {status}\n"
+        f"🔌 กำลังดึงไฟ: *{grid_pwr:,.0f} W*\n"
+        f"📊 ซื้อไฟสะสมวันนี้: *{grid_daily_kwh:,.2f} kWh*\n"
+        f"----------\n"
+        f"🏠 บ้านใช้: {home_pwr:,.0f} W\n"
+        f"☀️ จากโซลาร์: {solar_pwr:,.0f} W"
+    )
+
+
 def _build_help_reply() -> str:
     """สร้างข้อความแสดงคำสั่งที่ใช้ได้"""
     return (
@@ -266,6 +295,8 @@ def _build_help_reply() -> str:
         f"→ สรุปค่าไฟและเงินประหยัดวันนี้\n\n"
         f"☀️ `/solar` หรือ *โซลาร์*\n"
         f"→ ข้อมูลการผลิตไฟจากโซลาร์\n\n"
+        f"⚡️ `/grid` หรือ *ไฟหลวง*\n"
+        f"→ ข้อมูลการดึงไฟจากการไฟฟ้า\n\n"
         f"❓ `/help` หรือ *ช่วย*\n"
         f"→ แสดงรายการคำสั่งนี้\n"
         f"----------\n"
@@ -324,6 +355,8 @@ def process_chat_commands(state: dict, creds: dict,
             reply = _build_cost_reply(readings, current_time)
         elif cmd in ("/solar", "โซลาร์", "แผง", "ผลิต", "solar"):
             reply = _build_solar_reply(readings, current_time)
+        elif cmd in ("/grid", "กริด", "ไฟหลวง", "การไฟฟ้า", "grid"):
+            reply = _build_grid_reply(readings, current_time)
         elif cmd in ("/help", "ช่วย", "help", "คำสั่ง", "/start", "เมนู"):
             reply = _build_help_reply()
         else:
