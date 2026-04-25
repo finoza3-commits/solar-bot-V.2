@@ -39,7 +39,7 @@ GRID_DAILY_KEYS = ["DailyEnergyPurchased", "DailyGridPurchased"]
 GRID_POWER_KEYS = ["TotalGridPower", "Total Grid Power"]
 
 # Key mapping สำหรับแรงดันไฟฟ้า (Voltage)
-VOLTAGE_KEYS = ["APhaseVoltage", "GridVoltage", "UAC1", "Ua", "PhaseAVoltage"]
+VOLTAGE_KEYS = ["ACVoltageRUA", "ABLineVoltage"]
 
 # แรงดันไฟฟ้าต่ำสุด (V) ก่อนแจ้งเตือน
 LOW_VOLTAGE_LIMIT = 165
