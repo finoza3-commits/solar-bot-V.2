@@ -686,21 +686,52 @@ def check_startup(is_startup: bool, creds: dict) -> None:
         )
 
 
-def check_sun_status(solar_pwr: float, state: dict, creds: dict) -> None:
-    """ตรวจสอบสถานะแดดออก/หมด แล้วแจ้งเตือนเมื่อเปลี่ยน"""
-    current_sun = "แดดออก" if solar_pwr > SUN_THRESHOLD else "แดดหมด"
+def check_sun_status(solar_pwr: float, state: dict, creds: dict, readings: dict) -> None:
+    """ตรวจสอบสถานะแดดออก/กำลังจะหมด/หมด แล้วแจ้งเตือนเมื่อเปลี่ยน"""
+    home_pwr = readings.get("home_pwr", 0)
+    grid_pwr = readings.get("grid_pwr", 0)
+    voltage = readings.get("voltage", 0)
+    solar_daily = readings.get("solar_daily_kwh", 0)
 
-    if state["sun_status"] and current_sun != state["sun_status"]:
+    # กำหนดสถานะ 3 ระดับ
+    if solar_pwr > 300:
+        current_sun = "แดดออก"
+    elif solar_pwr > 0:
+        current_sun = "แดดกำลังจะหมด"
+    else:
+        current_sun = "แดดหมด"
+
+    prev_sun = state.get("sun_status")
+
+    if prev_sun and current_sun != prev_sun:
         if current_sun == "แดดออก":
             send_telegram(
                 f"🌅 *[ แจ้งเตือน: แดดออกแล้ว! ]*\n"
-                f"ระบบโซลาร์เริ่มผลิตไฟฟ้า: {solar_pwr:,.0f} W",
+                f"ระบบโซลาร์เริ่มผลิตไฟฟ้า: *{solar_pwr:,.0f} W*\n"
+                f"🏠 บ้านใช้ไฟ: {home_pwr:,.0f} W | 🔋 แรงดัน: {voltage:.1f} V",
                 creds,
             )
-        else:
+        elif current_sun == "แดดกำลังจะหมด":
+            send_telegram(
+                f"🌇 *[ แจ้งเตือน: แดดกำลังจะหมด! ]*\n"
+                f"โซลาร์ผลิตเหลือ: *{solar_pwr:,.0f} W* (ต่ำกว่า 300W)\n"
+                f"----------\n"
+                f"🏠 บ้านกำลังใช้: {home_pwr:,.0f} W\n"
+                f"⚡️ ดึงไฟฟ้า: {grid_pwr:,.0f} W\n"
+                f"☀️ ผลิตได้วันนี้: {solar_daily:,.2f} kWh\n"
+                f"----------\n"
+                f"💡 _เตรียมพร้อมเข้าสู่โหมดใช้ไฟฟ้าจากกริด_",
+                creds,
+            )
+        elif current_sun == "แดดหมด":
             send_telegram(
                 f"🌙 *[ แจ้งเตือน: แดดหมดแล้ว! ]*\n"
                 f"ระบบเข้าสู่โหมดพักการผลิตไฟฟ้า\n"
+                f"----------\n"
+                f"☀️ ผลิตได้วันนี้: *{solar_daily:,.2f} kWh* "
+                f"(ประหยัด {solar_daily * COST_PER_UNIT:,.2f} ฿)\n"
+                f"🏠 บ้านกำลังใช้: {home_pwr:,.0f} W (จากกริดทั้งหมด)\n"
+                f"----------\n"
                 f"*(บอทจะสรุปยอดรวมของวันนี้ให้ตอน 23:55 น. ครับ)*",
                 creds,
             )
@@ -1226,7 +1257,7 @@ def deye_monitoring_loop(creds):
                     state["last_hourly_run"] = current_hour
                     check_startup(True, creds)
 
-                check_sun_status(readings["solar_pwr"], state, creds)
+                check_sun_status(readings["solar_pwr"], state, creds, readings)
                 check_overload(
                     readings["solar_pwr"], readings["grid_pwr"],
                     readings["home_pwr"], state, creds,
