@@ -161,6 +161,30 @@ def get_telegram_updates(creds: dict, last_update_id: int) -> list:
     return []
 
 
+def get_weather() -> str:
+    """ดึงข้อมูลสภาพอากาศ (อุณหภูมิภายนอก) จาก Open-Meteo (พิกัดเริ่มต้น: กรุงเทพฯ)"""
+    try:
+        url = "https://api.open-meteo.com/v1/forecast?latitude=13.754&longitude=100.5014&current=temperature_2m,weather_code&timezone=Asia%2FBangkok"
+        resp = requests.get(url, timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            temp = data["current"]["temperature_2m"]
+            code = data["current"]["weather_code"]
+            
+            weather_map = {
+                0: "☀️", 1: "🌤", 2: "⛅️", 3: "☁️",
+                45: "🌫", 48: "🌫",
+                51: "🌧", 53: "🌧", 55: "🌧",
+                61: "🌧", 63: "🌧", 65: "🌧",
+                80: "🌦", 95: "⛈"
+            }
+            desc = weather_map.get(code, "🌡")
+            return f"{desc} {temp}°C"
+    except Exception:
+        pass
+    return ""
+
+
 def _build_status_reply(readings: dict | None, current_time: str) -> str:
     """สร้างข้อความตอบกลับสถานะปัจจุบัน"""
     if readings is None:
@@ -180,9 +204,13 @@ def _build_status_reply(readings: dict | None, current_time: str) -> str:
     home_cost = home_daily_kwh * COST_PER_UNIT
     est_grid_cost = max(0, home_cost - saved_money)
 
+    weather_str = readings.get("current_weather", "")
+    weather_line = f"🌡 สภาพอากาศ: {weather_str}\n" if weather_str else ""
+
     return (
         f"📊 *[ สถานะระบบ Real-time ]*\n"
         f"⏰ เวลา: {current_time}\n"
+        f"{weather_line}"
         f"----------\n"
         f"☀️ โซลาร์: {solar_pwr:,.0f} W ({solar_status})\n"
         f"🏠 บ้านใช้: {home_pwr:,.0f} W\n"
@@ -757,6 +785,9 @@ def home():
     
     current_month = state.get("current_month", "กำลังรวบรวมข้อมูล")
     
+    weather_str = readings.get("current_weather", "")
+    weather_html = f'<span style="font-size: 1.25rem; color: var(--text-muted); font-weight: 400; margin-left: 10px; vertical-align: middle;">{weather_str}</span>' if weather_str else ""
+    
     html = f"""
     <!DOCTYPE html>
     <html lang="th">
@@ -869,7 +900,7 @@ def home():
         </style>
     </head>
     <body>
-        <h1><span class="live-indicator"></span>Solar Dashboard</h1>
+        <h1><span class="live-indicator"></span>Solar Dashboard {weather_html}</h1>
         
         <div class="dashboard">
             <!-- Real-time Card -->
@@ -955,6 +986,10 @@ def deye_monitoring_loop(creds):
                 is_startup = not state.get("_has_started")
 
             readings = fetch_inverter_data(creds)
+            if readings is not None:
+                weather_str = get_weather()
+                if weather_str:
+                    readings["current_weather"] = weather_str
 
             with readings_lock:
                 global_readings = readings
