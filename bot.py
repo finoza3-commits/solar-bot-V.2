@@ -8,9 +8,11 @@ import time
 import logging
 import json
 import os
+import threading
 from datetime import datetime
 
 import pytz
+from flask import Flask
 
 from config import (
     COST_PER_UNIT, SUN_THRESHOLD, OVERLOAD_LIMIT, TIMEZONE,
@@ -633,84 +635,120 @@ def process_hourly(current_hour: int, current_minute: int, current_time: str,
 
 
 # ==========================================
-# Main
+# Main & Web Server (For Render)
 # ==========================================
 
-def main():
-    """จุดเริ่มต้นหลักของบอท"""
-    logger.info("=== Solar Bot เริ่มทำงาน ===")
+app = Flask(__name__)
 
-    # โหลด credentials
+@app.route('/')
+def home():
+    return "Solar Bot is running 24/7!"
+
+global_state = None
+global_readings = None
+state_lock = threading.Lock()
+readings_lock = threading.Lock()
+
+def deye_monitoring_loop(creds):
+    """ลูปตรวจสอบ Deye API ทุก 5 นาที"""
+    global global_state, global_readings
+    logger.info("=== เริ่มทำงาน Deye Monitoring Loop ===")
+    
+    while True:
+        try:
+            tz = pytz.timezone(TIMEZONE)
+            now = datetime.now(tz)
+            current_time = now.strftime("%Y-%m-%d %H:%M")
+            current_hour = now.hour
+            current_minute = now.minute
+
+            with state_lock:
+                state = global_state
+                is_startup = not state.get("_has_started")
+
+            readings = fetch_inverter_data(creds)
+
+            with readings_lock:
+                global_readings = readings
+
+            if readings is None:
+                check_online_status(False, state, creds, current_time)
+            else:
+                check_online_status(True, state, creds, current_time)
+
+                if is_startup:
+                    state["_has_started"] = True
+                    # ป้องกันกราฟพุ่งกระโดดจากการเริ่มรันครั้งแรกบน Render
+                    state["last_solar_kwh"] = readings["solar_daily_kwh"]
+                    state["last_grid_kwh"] = readings["grid_daily_kwh"]
+                    state["last_hourly_run"] = current_hour
+                    check_startup(True, creds)
+
+                check_sun_status(readings["solar_pwr"], state, creds)
+                check_overload(
+                    readings["solar_pwr"], readings["grid_pwr"],
+                    readings["home_pwr"], state, creds,
+                )
+                process_hourly(current_hour, current_minute, current_time,
+                               state, readings, creds)
+
+            with state_lock:
+                save_state(state)
+
+        except Exception as e:
+            logger.exception("Deye Monitoring Error")
+            if not global_state.get("is_offline"):
+                send_telegram(f"⚠️ *[ ระบบขัดข้อง ]*\nDeye API Error\n`{e}`", creds)
+                global_state["is_offline"] = True
+
+        time.sleep(300)  # รอ 5 นาทีก่อนเช็คใหม่
+
+
+def telegram_polling_loop(creds):
+    """ลูปตรวจสอบคำสั่งจาก Telegram ทุก 5 วินาที"""
+    global global_state, global_readings
+    logger.info("=== เริ่มทำงาน Telegram Polling Loop ===")
+    
+    while True:
+        try:
+            tz = pytz.timezone(TIMEZONE)
+            now = datetime.now(tz)
+            current_time = now.strftime("%Y-%m-%d %H:%M")
+
+            with state_lock:
+                state = global_state
+
+            with readings_lock:
+                readings = global_readings
+
+            process_chat_commands(state, creds, readings, current_time)
+
+            with state_lock:
+                save_state(state)
+
+        except Exception as e:
+            logger.exception("Telegram Polling Error")
+
+        time.sleep(5)  # รอ 5 วินาทีก่อนดึงแชทใหม่
+
+
+def start_bot():
+    """ตั้งค่าและเริ่ม Thread ของบอท"""
+    global global_state
     creds = get_credentials()
+    global_state = load_state()
 
-    # เวลาปัจจุบัน
-    tz = pytz.timezone(TIMEZONE)
-    now = datetime.now(tz)
-    current_time = now.strftime("%Y-%m-%d %H:%M")
-    current_hour = now.hour
-    current_minute = now.minute
-
-    # โหลดสถานะ
-    is_startup = not os.path.exists(STATUS_FILE)
-    state = load_state()
-
-    try:
-        # ดึงข้อมูลจาก Deye API
-        readings = fetch_inverter_data(creds)
-
-        if readings is None:
-            # Offline
-            check_online_status(False, state, creds, current_time)
-        else:
-            # Online
-            check_online_status(True, state, creds, current_time)
-
-            # แจ้งเตือนเมื่อเริ่มทำงานครั้งแรก
-            check_startup(is_startup, creds)
-
-            # ตรวจสอบสถานะแดด
-            check_sun_status(readings["solar_pwr"], state, creds)
-
-            # ตรวจสอบ overload
-            check_overload(
-                readings["solar_pwr"], readings["grid_pwr"],
-                readings["home_pwr"], state, creds,
-            )
-
-            # รายงานรายชั่วโมง
-            process_hourly(current_hour, current_minute, current_time,
-                           state, readings, creds)
-
-        # ตอบกลับข้อความ chat (ทำงานได้ทั้ง online/offline)
-        process_chat_commands(state, creds, readings, current_time)
-
-    except requests.RequestException as e:
-        logger.error("เชื่อมต่อ Deye API ล้มเหลว: %s", e)
-        if not state["is_offline"]:
-            send_telegram(
-                f"⚠️ *[ ระบบขัดข้อง ]*\n"
-                f"ติดต่อ Server Deye ไม่ได้ (อาจเกิดจากเน็ตล่ม)\n"
-                f"`{e}`",
-                creds,
-            )
-            state["is_offline"] = True
-
-    except Exception as e:
-        logger.exception("เกิดข้อผิดพลาดที่ไม่คาดคิด")
-        if not state["is_offline"]:
-            send_telegram(
-                f"⚠️ *[ ระบบขัดข้อง ]*\n"
-                f"เกิดข้อผิดพลาดที่ไม่คาดคิด\n"
-                f"`{e}`",
-                creds,
-            )
-            state["is_offline"] = True
-
-    finally:
-        # บันทึกสถานะเสมอ ไม่ว่าจะสำเร็จหรือไม่
-        save_state(state)
-        logger.info("=== Solar Bot จบการทำงาน ===")
+    t1 = threading.Thread(target=deye_monitoring_loop, args=(creds,), daemon=True)
+    t2 = threading.Thread(target=telegram_polling_loop, args=(creds,), daemon=True)
+    
+    t1.start()
+    t2.start()
 
 
 if __name__ == "__main__":
-    main()
+    # 1. เริ่มทำงานบอทใน Background
+    start_bot()
+    
+    # 2. เริ่มทำงาน Web Server สำหรับ Render
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
