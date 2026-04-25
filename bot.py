@@ -233,28 +233,35 @@ def _build_cost_reply(readings: dict | None, current_time: str) -> str:
 
     solar_daily_kwh = readings["solar_daily_kwh"]
     grid_daily_kwh = readings["grid_daily_kwh"]
+    home_daily_kwh = readings.get("home_daily_kwh", 0.0)
+    
     solar_money = solar_daily_kwh * COST_PER_UNIT
     grid_money = grid_daily_kwh * COST_PER_UNIT
+    home_money = home_daily_kwh * COST_PER_UNIT
+    
     net = solar_money - grid_money
 
     net_text = (
-        f"✅ ประหยัดสุทธิ {net:,.2f} ฿"
+        f"✅ กำไรสุทธิ {net:,.2f} ฿"
         if net >= 0
-        else f"❌ จ่ายค่าไฟเพิ่ม {abs(net):,.2f} ฿"
+        else f"❌ ติดลบ {abs(net):,.2f} ฿"
     )
 
     return (
         f"💰 *[ สรุปค่าไฟวันนี้ ]*\n"
         f"⏰ เวลา: {current_time}\n"
         f"----------\n"
-        f"☀️ ผลิตได้: {solar_daily_kwh:,.2f} kWh\n"
-        f"💡 ประหยัดแล้ว: *{solar_money:,.2f} บาท*\n"
+        f"☀️ จากโซลาร์: {solar_daily_kwh:,.2f} kWh\n"
+        f"💡 ประหยัดเงิน: *{solar_money:,.2f} บาท*\n"
         f"----------\n"
         f"⚡️ ซื้อไฟฟ้า: {grid_daily_kwh:,.2f} kWh\n"
         f"💸 เสียค่าไฟ: *{grid_money:,.2f} บาท*\n"
         f"----------\n"
-        f"💵 *สรุป: {net_text}*\n"
-        f"📌 คิดที่หน่วยละ {COST_PER_UNIT} บาท"
+        f"🏠 บ้านใช้ไฟฟ้า: {home_daily_kwh:,.2f} kWh\n"
+        f"📊 ถ้าไม่มีโซลาร์ต้องจ่าย: *{home_money:,.2f} บาท*\n"
+        f"----------\n"
+        f"💵 *สรุปส่วนต่าง: {net_text}*\n"
+        f"📌 (คิดที่หน่วยละ {COST_PER_UNIT} บาท)"
     )
 
 
