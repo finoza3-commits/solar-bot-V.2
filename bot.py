@@ -309,14 +309,20 @@ def process_chat_commands(state: dict, creds: dict,
         if not text:
             continue
 
+        # จัดการกรณีคำสั่งมี @botname ต่อท้าย เช่น /status@solar_bot
+        if text.startswith('/'):
+            cmd = text.split()[0].split('@')[0]
+        else:
+            cmd = text
+
         # จับคู่คำสั่ง
-        if text in ("/status", "สถานะ", "เช็ค", "เช็คสถานะ", "status"):
+        if cmd in ("/status", "สถานะ", "เช็ค", "เช็คสถานะ", "status"):
             reply = _build_status_reply(readings, current_time)
-        elif text in ("/cost", "ค่าไฟ", "เงิน", "ประหยัด", "cost"):
+        elif cmd in ("/cost", "ค่าไฟ", "เงิน", "ประหยัด", "cost"):
             reply = _build_cost_reply(readings, current_time)
-        elif text in ("/solar", "โซลาร์", "แผง", "ผลิต", "solar"):
+        elif cmd in ("/solar", "โซลาร์", "แผง", "ผลิต", "solar"):
             reply = _build_solar_reply(readings, current_time)
-        elif text in ("/help", "ช่วย", "help", "คำสั่ง", "/start", "เมนู"):
+        elif cmd in ("/help", "ช่วย", "help", "คำสั่ง", "/start", "เมนู"):
             reply = _build_help_reply()
         else:
             reply = _build_unknown_reply(text)
