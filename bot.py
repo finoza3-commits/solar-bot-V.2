@@ -216,11 +216,11 @@ def _build_status_reply(readings: dict | None, current_time: str) -> str:
         f"----------\n"
         f"☀️ โซลาร์: {solar_pwr:,.0f} W ({solar_status})\n"
         f"🏠 บ้านใช้: {home_pwr:,.0f} W\n"
-        f"⚡️ กริด: {grid_pwr:,.0f} W\n"
+        f"⚡️ ไฟฟ้า: {grid_pwr:,.0f} W\n"
         f"----------\n"
         f"📈 *ยอดสะสมวันนี้*\n"
         f"☀️ ผลิตได้: {solar_daily_kwh:,.2f} kWh (ประหยัด {saved_money:,.2f} ฿)\n"
-        f"⚡️ ซื้อกริด: {grid_daily_kwh:,.2f} kWh (เสียค่าไฟ {grid_cost:,.2f} ฿)\n"
+        f"⚡️ ซื้อไฟฟ้า: {grid_daily_kwh:,.2f} kWh (เสียค่าไฟ {grid_cost:,.2f} ฿)\n"
         f"🏠 บ้านใช้รวม: {home_daily_kwh:,.2f} kWh (ตีเป็นเงิน {home_cost:,.2f} ฿)\n"
         f"💸 ประเมินค่าไฟที่ต้องจ่าย: {est_grid_cost:,.2f} ฿"
     )
@@ -250,7 +250,7 @@ def _build_cost_reply(readings: dict | None, current_time: str) -> str:
         f"☀️ ผลิตได้: {solar_daily_kwh:,.2f} kWh\n"
         f"💡 ประหยัดแล้ว: *{solar_money:,.2f} บาท*\n"
         f"----------\n"
-        f"⚡️ ซื้อไฟกริด: {grid_daily_kwh:,.2f} kWh\n"
+        f"⚡️ ซื้อไฟฟ้า: {grid_daily_kwh:,.2f} kWh\n"
         f"💸 เสียค่าไฟ: *{grid_money:,.2f} บาท*\n"
         f"----------\n"
         f"💵 *สรุป: {net_text}*\n"
@@ -283,7 +283,7 @@ def _build_solar_reply(readings: dict | None, current_time: str) -> str:
         f"📊 ผลิตสะสมวันนี้: *{solar_daily_kwh:,.2f} kWh* (ประหยัด {solar_daily_kwh * COST_PER_UNIT:,.2f} ฿)\n"
         f"----------\n"
         f"🏠 บ้านใช้: {home_pwr:,.0f} W\n"
-        f"🔌 ดึงกริด: {grid_pwr:,.0f} W\n"
+        f"🔌 ดึงไฟฟ้า: {grid_pwr:,.0f} W\n"
         f"☀️ จากโซลาร์: {solar_pwr:,.0f} W"
     )
 
@@ -300,16 +300,16 @@ def _build_grid_reply(readings: dict | None, current_time: str) -> str:
 
     if grid_pwr > 0:
         grid_pct = (grid_pwr / home_pwr * 100) if home_pwr > 0 else 0
-        status = f"🔴 กำลังดึงไฟหลวง ({grid_pct:.0f}% ของโหลด)"
+        status = f"🔴 กำลังดึงไฟฟ้า ({grid_pct:.0f}% ของโหลด)"
     elif grid_pwr < 0:
         status = "🔄 จ่ายไฟย้อนเข้าสายส่ง (Export)"
     else:
-        status = "🟢 ไม่ได้ดึงไฟหลวง (ใช้โซลาร์ล้วน/แบตเตอรี่)"
+        status = "🟢 ไม่ได้ดึงไฟฟ้า (ใช้โซลาร์ล้วน/แบตเตอรี่)"
 
     display_grid_pwr = abs(grid_pwr)
 
     return (
-        f"⚡️ *[ ข้อมูลไฟหลวง (กริด) ]*\n"
+        f"⚡️ *[ ข้อมูลไฟฟ้า ]*\n"
         f"⏰ เวลา: {current_time}\n"
         f"----------\n"
         f"📡 สถานะ: {status}\n"
@@ -334,7 +334,7 @@ def _build_help_reply() -> str:
         f"→ สรุปยอดสะสมรวมของเดือนนี้\n\n"
         f"☀️ `/solar` หรือ *โซลาร์*\n"
         f"→ ข้อมูลการผลิตไฟจากโซลาร์\n\n"
-        f"⚡️ `/grid` หรือ *ไฟหลวง*\n"
+        f"⚡️ `/grid` หรือ *ไฟฟ้า*\n"
         f"→ ข้อมูลการดึงไฟจากการไฟฟ้า\n\n"
         f"❓ `/help` หรือ *ช่วย*\n"
         f"→ แสดงรายการคำสั่งนี้\n"
@@ -377,7 +377,7 @@ def _build_month_reply(state: dict, current_time: str) -> str:
         f"• ผลิตสะสม: {solar_kwh:,.2f} kWh\n"
         f"• 💡 ประหยัดเงิน: {solar_money:,.2f} บาท\n"
         f"----------\n"
-        f"⚡️ *พลังงานจากไฟหลวง (กริด)*\n"
+        f"⚡️ *พลังงานจากไฟฟ้า*\n"
         f"• ซื้อสะสม: {grid_kwh:,.2f} kWh\n"
         f"• 💸 เสียค่าไฟ: {grid_money:,.2f} บาท\n"
         f"----------\n"
@@ -583,7 +583,7 @@ def check_startup(is_startup: bool, creds: dict) -> None:
             f"บอทผู้ช่วยโซลาร์เซลล์เชื่อมต่อสำเร็จแล้ว ✅\n"
             f"----------\n"
             f"📡 เฝ้าระวังไฟตก เน็ตหลุด และโหลดเกินให้คุณตลอด 24 ชม.\n"
-            f"⚠️ แจ้งเตือนทันทีเมื่อดึงไฟกริดเกิน: {OVERLOAD_LIMIT:,.0f} W",
+            f"⚠️ แจ้งเตือนทันทีเมื่อดึงไฟฟ้าเกิน: {OVERLOAD_LIMIT:,.0f} W",
             creds,
         )
 
@@ -620,7 +620,7 @@ def check_overload(solar_pwr: float, grid_pwr: float, home_pwr: float,
             f"⚠️ *[ แจ้งเตือนด่วน! ]*\n"
             f"ใช้งานเกินกำลังการผลิต!\n"
             f"----------\n"
-            f"⚡️ ดึงไฟกริด: {grid_pwr:,.0f} W\n"
+            f"⚡️ ดึงไฟฟ้า: {grid_pwr:,.0f} W\n"
             f"☀️ โซลาร์ผลิต: {solar_pwr:,.0f} W\n"
             f"🔋 บ้านใช้ไฟรวม: {home_pwr:,.0f} W\n"
             f"*(กรุณาลดการใช้ไฟฟ้าเพื่อประหยัดค่าไฟ)*",
@@ -630,7 +630,7 @@ def check_overload(solar_pwr: float, grid_pwr: float, home_pwr: float,
     elif not is_ovl and state["is_overloaded"]:
         send_telegram(
             f"✅ *[ สถานะปกติ ]*\n"
-            f"การดึงไฟจากการไฟฟ้าลดลงอยู่ในเกณฑ์ปลอดภัยแล้ว (ดึงกริด {grid_pwr:,.0f} W)",
+            f"การดึงไฟจากการไฟฟ้าลดลงอยู่ในเกณฑ์ปลอดภัยแล้ว (ดึงไฟฟ้า {grid_pwr:,.0f} W)",
             creds,
         )
         state["is_overloaded"] = False
@@ -684,7 +684,7 @@ def send_daily_summary(current_time: str, financials: dict,
             
             hourly_text += f"`{time_str}` | โซลาร์ {s_val:.1f} {s_bar}\n"
             if g_val > 0:
-                hourly_text += f"`     ` | กริด   {g_val:.1f} {g_bar}\n"
+                hourly_text += f"`     ` | ไฟฟ้า  {g_val:.1f} {g_bar}\n"
             
         # ล้างข้อมูลเมื่อส่งสรุปแล้ว
         state["daily_hourly_history"] = []
@@ -907,7 +907,7 @@ def home():
                     <span class="value solar">{{solar_pwr:,.0f}} W</span>
                 </div>
                 <div class="data-row">
-                    <span class="label">ไฟหลวง (Grid)</span>
+                    <span class="label">ไฟฟ้า</span>
                     <span class="value grid">{{grid_pwr:,.0f}} W</span>
                 </div>
                 <div class="data-row">
@@ -928,7 +928,7 @@ def home():
                     <span class="value money">{{solar_daily_money:,.2f}} ฿</span>
                 </div>
                 <div class="data-row">
-                    <span class="label">ซื้อไฟหลวง</span>
+                    <span class="label">ซื้อไฟฟ้า</span>
                     <span class="value grid">{{grid_daily_kwh:,.2f}} kWh</span>
                 </div>
                 <div class="data-row">
@@ -949,7 +949,7 @@ def home():
                     <span class="value money">{{monthly_solar_money:,.2f}} ฿</span>
                 </div>
                 <div class="data-row">
-                    <span class="label">ซื้อไฟหลวงรวม</span>
+                    <span class="label">ซื้อไฟฟ้ารวม</span>
                     <span class="value grid">{{monthly_grid_kwh:,.2f}} kWh</span>
                 </div>
                 <div class="data-row">
