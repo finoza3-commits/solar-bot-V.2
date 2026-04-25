@@ -497,6 +497,16 @@ def fetch_inverter_data(creds: dict) -> dict | None:
 
 def _parse_device_data(device_data: list) -> dict:
     """แปลงข้อมูลดิบจาก Deye เป็น dict ที่ใช้งานง่าย"""
+    # === DEBUG: แสดง Key ทั้งหมดจาก API เพื่อหา Voltage Key ===
+    all_keys = []
+    for item in device_data:
+        k = item.get("key", "")
+        v = item.get("value", "")
+        u = item.get("unit", "")
+        all_keys.append(f"{k}={v} {u}")
+    logger.info("=== Deye API Keys ทั้งหมด ===\n%s", "\n".join(all_keys))
+    # === จบ DEBUG ===
+
     solar_pwr = 0.0
     solar_daily_kwh = 0.0
     home_pwr = 0.0
