@@ -230,8 +230,8 @@ def _build_status_reply(readings: dict | None, current_time: str) -> str:
         f"📊 *สถิติสะสมตลอดอายุ* (ติดตั้ง 19/4/69)\n"
         f"📅 ใช้งานมาแล้ว: {(datetime.now(pytz.timezone('Asia/Bangkok')).date() - datetime(2026, 4, 19).date()).days} วัน\n"
         f"☀️ ผลิตรวม: {readings.get('total_production', 0):,.2f} kWh "
-        f"(จำนวนเงิน *{readings.get('total_production', 0) * COST_PER_UNIT:,.2f} ฿*)\n"
-        f"💰 คืนทุน: *{readings.get('total_production', 0) * COST_PER_UNIT / INSTALL_COST * 100:.2f}%* "
+        f"({readings.get('total_production', 0) * COST_PER_UNIT:,.2f} ฿)\n"
+        f"💰 คืนทุนแล้ว: *{readings.get('total_production', 0) * COST_PER_UNIT / INSTALL_COST * 100:.2f}%* "
         f"ของ {INSTALL_COST:,.0f} ฿"
     )
 
