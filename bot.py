@@ -1154,7 +1154,8 @@ def deye_monitoring_loop(creds):
                 global_readings = readings
 
             # --- เพิ่มลอจิกสะสมค่าไฟบ้านเอง (Manual Accumulation) ---
-            with state_lock:
+            if readings is not None:
+              with state_lock:
                 now_dt = datetime.now(pytz.timezone(TIMEZONE))
                 last_calc_str = global_state.get("last_calc_time")
                 
@@ -1238,9 +1239,9 @@ def deye_monitoring_loop(creds):
                 # ------------------------------
 
                 save_state(global_state)
-            # ----------------------------------------------------
+              # ----------------------------------------------------
 
-            logger.info("อัปเดตข้อมูลจาก Deye สำเร็จ (Home: %.2f W, Home_Daily: %.2f kWh, Grid_Daily: %.2f kWh)", 
+              logger.info("อัปเดตข้อมูลจาก Deye สำเร็จ (Home: %.2f W, Home_Daily: %.2f kWh, Grid_Daily: %.2f kWh)", 
                         readings["home_pwr"], readings.get("home_daily_kwh", 0), readings.get("grid_daily_kwh", 0))
 
             if readings is None:
