@@ -203,11 +203,10 @@ def _build_status_reply(readings: dict | None, current_time: str) -> str:
 
     solar_status = "🟢 ตอนนี้โซลาร์กำลังผลิตไฟฟ้า" if solar_pwr > SUN_THRESHOLD else "🔴 ตอนนี้โซลาร์ไม่ได้ผลิตไฟฟ้า"
 
-    # คำนวณเงิน
-    saved_money = solar_daily_kwh * COST_PER_UNIT
-    home_cost = home_daily_kwh * COST_PER_UNIT
-    grid_cost = grid_daily_kwh * COST_PER_UNIT
-    est_grid_cost = max(0, home_cost - saved_money)
+    # สูตรหลัก: ไฟฟ้าที่ต้องซื้อ = บ้านใช้ - โซลาร์ผลิต
+    grid_actual_kwh = max(0.0, home_daily_kwh - solar_daily_kwh)
+    grid_cost = grid_actual_kwh * COST_PER_UNIT  # ← ค่าไฟที่ต้องจ่ายจริง
+    solar_saved = solar_daily_kwh * COST_PER_UNIT
 
     weather_str = readings.get("current_weather", "")
     weather_line = f"🌡 สภาพอากาศ: {weather_str}\n" if weather_str else ""
@@ -217,16 +216,16 @@ def _build_status_reply(readings: dict | None, current_time: str) -> str:
         f"⏰ เวลา: {current_time}\n"
         f"{weather_line}"
         f"----------\n"
+        f"🏠 บ้านใช้ไฟ: {home_pwr:,.0f} W\n"
         f"☀️ โซลาร์: {solar_pwr:,.0f} W   |   ⚡️ ไฟฟ้า: {grid_pwr:,.0f} W\n"
-        f"🏠 บ้านใช้ไฟฟ้า : {home_pwr:,.0f} W\n"
-        f"🔋 แรงดันไฟฟ้า: {readings.get('voltage', 0):,.1f} V | ความถี่: {readings.get('ac_frequency', 0):.2f} Hz\n"
+        f"🔋 แรงดัน: {readings.get('voltage', 0):,.1f} V | ความถี่: {readings.get('ac_frequency', 0):.2f} Hz\n"
         f"{solar_status}\n"
         f"----------\n"
         f"📈 *ยอดสะสมวันนี้*\n"
-        f"☀️ ผลิตได้: {solar_daily_kwh:,.2f} kWh (ประหยัด {saved_money:,.2f} ฿)\n"
-        f"⚡️ ซื้อไฟฟ้า: {grid_daily_kwh:,.2f} kWh (เสียค่าไฟ {grid_cost:,.2f} ฿)\n"
-        f"🏠 บ้านใช้รวม: {home_daily_kwh:,.2f} kWh (ตีเป็นเงิน {home_cost:,.2f} ฿)\n"
-        f"💸 ประเมินค่าไฟที่ต้องจ่าย: {est_grid_cost:,.2f} ฿\n"
+        f"🏠 บ้านใช้รวม: {home_daily_kwh:,.2f} kWh\n"
+        f"☀️ โซลาร์ผลิตได้: {solar_daily_kwh:,.2f} kWh (ประหยัด {solar_saved:,.2f} ฿)\n"
+        f"⚡️ ไฟฟ้าที่ต้องซื้อ: {grid_actual_kwh:,.2f} kWh\n"
+        f"💸 *ค่าไฟที่ต้องจ่ายวันนี้: {grid_cost:,.2f} ฿*\n"
         f"----------\n"
         f"📊 *สถิติสะสมตลอดอายุ* (ติดตั้ง 19/4/69)\n"
         f"📅 ใช้งานมาแล้ว: {(datetime.now(pytz.timezone('Asia/Bangkok')).date() - datetime(2026, 4, 19).date()).days} วัน\n"
@@ -238,40 +237,35 @@ def _build_status_reply(readings: dict | None, current_time: str) -> str:
 
 
 def _build_cost_reply(readings: dict | None, current_time: str) -> str:
-    """สร้างข้อความตอบกลับเรื่องค่าไฟ"""
+    """สร้างข้อความตอบกลับเรื่องค่าไฟ — สูตร: บ้านใช้ - โซลาร์ผลิต = ไฟฟ้าที่ซื้อ → ค่าไฟที่ต้องจ่าย"""
     if readings is None:
         return "❌ ไม่สามารถคำนวณค่าไฟได้ — ระบบ Offline"
 
     solar_daily_kwh = readings["solar_daily_kwh"]
-    grid_daily_kwh = readings["grid_daily_kwh"]
     home_daily_kwh = readings.get("home_daily_kwh", 0.0)
-    
-    solar_money = solar_daily_kwh * COST_PER_UNIT
-    grid_money = grid_daily_kwh * COST_PER_UNIT
-    home_money = home_daily_kwh * COST_PER_UNIT
-    
-    net = solar_money - grid_money
 
-    net_text = (
-        f"✅ ประหยัดสุทธิ {net:,.2f} ฿"
-        if net >= 0
-        else f"❌ จ่ายค่าไฟเพิ่ม {abs(net):,.2f} ฿"
-    )
+    # สูตรหลัก: ไฟฟ้าที่ต้องซื้อ = บ้านใช้ - โซลาร์ผลิตได้
+    grid_actual_kwh = max(0.0, home_daily_kwh - solar_daily_kwh)
+
+    # คิดเป็นเงิน
+    home_money = home_daily_kwh * COST_PER_UNIT
+    solar_money = solar_daily_kwh * COST_PER_UNIT
+    grid_cost = grid_actual_kwh * COST_PER_UNIT  # ← ค่าไฟที่ต้องจ่ายจริง
 
     return (
         f"💰 *[ สรุปค่าไฟวันนี้ ]*\n"
         f"⏰ เวลา: {current_time}\n"
+        f"==========\n"
+        f"🏠 *บ้านใช้ไฟรวม:* {home_daily_kwh:,.2f} kWh\n"
+        f"   ตีเป็นเงิน: {home_money:,.2f} บาท\n"
         f"----------\n"
-        f"☀️ จากโซลาร์: {solar_daily_kwh:,.2f} kWh\n"
-        f"💡 ประหยัดเงิน: *{solar_money:,.2f} บาท*\n"
+        f"☀️ *โซลาร์ผลิตได้:* {solar_daily_kwh:,.2f} kWh\n"
+        f"   ประหยัดไป: {solar_money:,.2f} บาท\n"
         f"----------\n"
-        f"⚡️ ซื้อไฟฟ้า: {grid_daily_kwh:,.2f} kWh\n"
-        f"💸 เสียค่าไฟ: *{grid_money:,.2f} บาท*\n"
-        f"----------\n"
-        f"🏠 บ้านใช้ไฟฟ้า: {home_daily_kwh:,.2f} kWh\n"
-        f"📊 ถ้าไม่มีโซลาร์ต้องจ่าย: *{home_money:,.2f} บาท*\n"
-        f"----------\n"
-        f"💵 *สรุปส่วนต่าง: {net_text}*\n"
+        f"⚡️ *ไฟฟ้าที่ต้องซื้อ:* {grid_actual_kwh:,.2f} kWh\n"
+        f"   (บ้านใช้ {home_daily_kwh:,.2f} − โซลาร์ {solar_daily_kwh:,.2f})\n"
+        f"==========\n"
+        f"💸 *ค่าไฟที่ต้องจ่ายวันนี้: {grid_cost:,.2f} บาท*\n"
         f"📌 (คิดที่หน่วยละ {COST_PER_UNIT} บาท)"
     )
 
@@ -399,27 +393,22 @@ def _build_month_reply(state: dict, current_time: str) -> str:
     grid_kwh = state.get("monthly_grid_kwh", 0.0)
     solar_money = state.get("monthly_solar_money", 0.0)
     grid_money = state.get("monthly_grid_money", 0.0)
-    net = solar_money - grid_money
-    
-    net_text = (
-        f"✅ ประหยัดสุทธิ {net:,.2f} ฿"
-        if net >= 0
-        else f"❌ จ่ายค่าไฟเพิ่ม {abs(net):,.2f} ฿"
-    )
+    home_kwh = solar_kwh + grid_kwh  # บ้านใช้รวม = โซลาร์ + ไฟฟ้าที่ซื้อ
+    home_money = home_kwh * COST_PER_UNIT
 
     return (
         f"📅 *[ สรุปยอดประจำเดือน: {month} ]*\n"
         f"⏰ อัปเดตล่าสุด: {current_time}\n"
+        f"==========\n"
+        f"🏠 *บ้านใช้ไฟรวม:* {home_kwh:,.2f} kWh\n"
+        f"   ตีเป็นเงิน: {home_money:,.2f} บาท\n"
         f"----------\n"
-        f"☀️ *พลังงานจากโซลาร์*\n"
-        f"• ผลิตสะสม: {solar_kwh:,.2f} kWh\n"
-        f"• 💡 ประหยัดเงิน: {solar_money:,.2f} บาท\n"
+        f"☀️ *โซลาร์ผลิตได้:* {solar_kwh:,.2f} kWh\n"
+        f"   ประหยัดไป: {solar_money:,.2f} บาท\n"
         f"----------\n"
-        f"⚡️ *พลังงานจากไฟฟ้า*\n"
-        f"• ซื้อสะสม: {grid_kwh:,.2f} kWh\n"
-        f"• 💸 เสียค่าไฟ: {grid_money:,.2f} บาท\n"
-        f"----------\n"
-        f"💵 *สรุป: {net_text}*\n"
+        f"⚡️ *ไฟฟ้าที่ต้องซื้อ:* {grid_kwh:,.2f} kWh\n"
+        f"==========\n"
+        f"💸 *ค่าไฟที่ต้องจ่ายเดือนนี้: {grid_money:,.2f} บาท*\n"
         f"📌 คิดที่หน่วยละ {COST_PER_UNIT} บาท"
     )
 
@@ -802,26 +791,18 @@ def check_low_voltage(voltage: float, state: dict, creds: dict, current_time: st
 
 def _calculate_financials(solar_daily_kwh: float, grid_daily_kwh: float,
                           solar_hourly: float, grid_hourly: float) -> dict:
-    """คำนวณค่าใช้จ่ายและเงินที่ประหยัดได้"""
+    """คำนวณค่าใช้จ่าย — สูตร: ค่าไฟที่ต้องจ่าย = ไฟฟ้าที่ซื้อ × ราคาต่อหน่วย"""
     solar_money_hr = solar_hourly * COST_PER_UNIT
     grid_money_hr = grid_hourly * COST_PER_UNIT
     solar_money_day = solar_daily_kwh * COST_PER_UNIT
-    grid_money_day = grid_daily_kwh * COST_PER_UNIT
-    net_money = solar_money_day - grid_money_day
-
-    net_text = (
-        f"✅ ประหยัดไฟสุทธิ {net_money:,.2f} ฿"
-        if net_money >= 0
-        else f"❌ จ่ายค่าไฟเพิ่ม {abs(net_money):,.2f} ฿"
-    )
+    # grid_daily_kwh = บ้านใช้ - โซลาร์ผลิต (คำนวณไว้แล้วตอน parse)
+    grid_money_day = grid_daily_kwh * COST_PER_UNIT  # ← ค่าไฟที่ต้องจ่ายจริง
 
     return {
         "solar_money_hr": solar_money_hr,
         "grid_money_hr": grid_money_hr,
         "solar_money_day": solar_money_day,
         "grid_money_day": grid_money_day,
-        "net_money": net_money,
-        "net_text": net_text,
     }
 
 
@@ -849,16 +830,19 @@ def send_daily_summary(current_time: str, financials: dict,
         # ล้างข้อมูลเมื่อส่งสรุปแล้ว
         state["daily_hourly_history"] = []
 
+    home_daily_kwh = solar_daily_kwh + grid_daily_kwh
+    home_money = home_daily_kwh * COST_PER_UNIT
+
     msg = (
         f"🏆 *[ สรุปยอดรวมประจำวัน ]*\n"
         f"📅 วันที่: {current_time}\n"
+        f"==========\n"
+        f"🏠 บ้านใช้ไฟรวม: {home_daily_kwh:,.2f} kWh\n"
+        f"☀️ โซลาร์ผลิตได้: {solar_daily_kwh:,.2f} kWh (ประหยัด {financials['solar_money_day']:,.2f} ฿)\n"
+        f"⚡️ ไฟฟ้าที่ต้องซื้อ: {grid_daily_kwh:,.2f} kWh\n"
         f"----------\n"
-        f"💰 *วันนี้ประหยัดเงินได้: {financials['solar_money_day']:,.2f} บาท*\n"
-        f"💸 *วันนี้เสียค่าไฟไป: {financials['grid_money_day']:,.2f} บาท*\n"
-        f"💵 *สรุปวันนี้: {financials['net_text']}*\n"
-        f"----------\n"
-        f"📊 *หน่วยไฟฟ้ารวม*\n"
-        f"• ผลิต: {solar_daily_kwh:,.2f} | ซื้อ: {grid_daily_kwh:,.2f} kWh"
+        f"💸 *ค่าไฟที่ต้องจ่ายวันนี้: {financials['grid_money_day']:,.2f} บาท*\n"
+        f"📌 คิดที่หน่วยละ {COST_PER_UNIT} บาท"
         f"{hourly_text}"
     )
     send_telegram(msg, creds)
@@ -930,14 +914,17 @@ def home():
     grid_pwr = readings.get("grid_pwr", 0)
     
     solar_daily_kwh = readings.get("solar_daily_kwh", 0)
-    grid_daily_kwh = readings.get("grid_daily_kwh", 0)
+    home_daily_kwh = readings.get("home_daily_kwh", 0)
+    # สูตรหลัก: ไฟฟ้าที่ต้องซื้อ = บ้านใช้ - โซลาร์
+    grid_actual_kwh = max(0, home_daily_kwh - solar_daily_kwh)
+    grid_actual_money = grid_actual_kwh * COST_PER_UNIT
     solar_daily_money = solar_daily_kwh * COST_PER_UNIT
-    grid_daily_money = grid_daily_kwh * COST_PER_UNIT
     
     monthly_solar_kwh = state.get("monthly_solar_kwh", 0)
     monthly_grid_kwh = state.get("monthly_grid_kwh", 0)
     monthly_solar_money = state.get("monthly_solar_money", 0)
     monthly_grid_money = state.get("monthly_grid_money", 0)
+    monthly_home_kwh = monthly_solar_kwh + monthly_grid_kwh
     
     current_month = state.get("current_month", "กำลังรวบรวมข้อมูล")
     
@@ -1080,20 +1067,24 @@ def home():
             <div class="card">
                 <div class="card-header">📈 สรุปวันนี้ (Daily)</div>
                 <div class="data-row">
-                    <span class="label">ผลิตไฟได้</span>
+                    <span class="label">🏠 บ้านใช้ไฟรวม</span>
+                    <span class="value home">{{home_daily_kwh:,.2f}} kWh</span>
+                </div>
+                <div class="data-row">
+                    <span class="label">☀️ โซลาร์ผลิตได้</span>
                     <span class="value solar">{{solar_daily_kwh:,.2f}} kWh</span>
                 </div>
                 <div class="data-row">
-                    <span class="label">ประหยัดเงิน</span>
+                    <span class="label">💡 ประหยัดเงิน</span>
                     <span class="value money">{{solar_daily_money:,.2f}} ฿</span>
                 </div>
                 <div class="data-row">
-                    <span class="label">ซื้อไฟฟ้า</span>
-                    <span class="value grid">{{grid_daily_kwh:,.2f}} kWh</span>
+                    <span class="label">⚡️ ไฟฟ้าที่ต้องซื้อ</span>
+                    <span class="value grid">{{grid_actual_kwh:,.2f}} kWh</span>
                 </div>
                 <div class="data-row">
-                    <span class="label">เสียค่าไฟ</span>
-                    <span class="value grid">{{grid_daily_money:,.2f}} ฿</span>
+                    <span class="label">💸 ค่าไฟที่ต้องจ่าย</span>
+                    <span class="value grid">{{grid_actual_money:,.2f}} ฿</span>
                 </div>
             </div>
 
@@ -1101,19 +1092,23 @@ def home():
             <div class="card">
                 <div class="card-header">📅 สรุปเดือนนี้ ({{current_month}})</div>
                 <div class="data-row">
-                    <span class="label">ผลิตไฟได้รวม</span>
+                    <span class="label">🏠 บ้านใช้ไฟรวม</span>
+                    <span class="value home">{{monthly_home_kwh:,.2f}} kWh</span>
+                </div>
+                <div class="data-row">
+                    <span class="label">☀️ โซลาร์ผลิตได้</span>
                     <span class="value solar">{{monthly_solar_kwh:,.2f}} kWh</span>
                 </div>
                 <div class="data-row">
-                    <span class="label">ประหยัดเงินรวม</span>
+                    <span class="label">💡 ประหยัดเงินรวม</span>
                     <span class="value money">{{monthly_solar_money:,.2f}} ฿</span>
                 </div>
                 <div class="data-row">
-                    <span class="label">ซื้อไฟฟ้ารวม</span>
+                    <span class="label">⚡️ ไฟฟ้าที่ต้องซื้อ</span>
                     <span class="value grid">{{monthly_grid_kwh:,.2f}} kWh</span>
                 </div>
                 <div class="data-row">
-                    <span class="label">เสียค่าไฟรวม</span>
+                    <span class="label">💸 ค่าไฟที่ต้องจ่าย</span>
                     <span class="value grid">{{monthly_grid_money:,.2f}} ฿</span>
                 </div>
             </div>
